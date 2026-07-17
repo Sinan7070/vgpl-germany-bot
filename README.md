@@ -1,0 +1,1 @@
+# vgpl-germany-bot
