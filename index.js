@@ -29,7 +29,8 @@ const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
     PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für das Ticket-Panel
     CATEGORY_ID: '1527708420788977674', // Kategorie für erstellte Tickets
-    ADMIN_ROLE_NAME: 'Admin' // Der genaue Name deiner Admin-Rolle
+    ADMIN_ROLE_NAME: 'Admin', // Der genaue Name deiner Admin-Rolle
+    HEAD_ADMIN_ROLE_NAME: 'Head Admin' // Der genaue Name deiner Head-Admin-Rolle
 };
 
 // Dummy-Webserver für Render
@@ -98,8 +99,9 @@ client.on('interactionCreate', async (interaction) => {
     const guild = interaction.guild;
     if (!guild) return;
 
-    // Finde die Admin-Rolle auf dem Server
+    // Finde die Admin-Rollen auf dem Server
     const adminRole = guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
+    const headAdminRole = guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
 
     // 1. DOCKDOWN MENÜ AUSWAHL -> MODAL (FORMULAR) ÖFFNEN
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_category') {
@@ -216,8 +218,7 @@ client.on('interactionCreate', async (interaction) => {
             ];
 
             botResponse = `**KI-Assistent:**\nDanke für deine Angaben.\nBitte prüfe zusätzlich:\n• Hast du bereits 3 Transfers in dieser Saison genutzt?\n• Bist du noch in einem anderen Team registriert?\n• Ist das Transferfenster aktuell geöffnet?\n\n*Falls der Fehler weiterhin besteht, antworte hier im Chat mit **TRANSFER FEHLER BESTÄTIGT** und lade einen Screenshot hoch.*`;
-            // Admin-Ping Logik: Nur bei expliziter Bestätigung (wird im Message-Listener weiter unten abgefangen, hier initial false)
-            pingAdmin = false;
+            pingAdmin = false; // Nur bei Chat-Bestätigung pingen!
         }
 
         else if (customId === 'modal_ergebnis') {
@@ -335,7 +336,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         try {
-            // Berechtigungen für das Ticket festlegen
+            // Berechtigungen für das Ticket festlegen (User + Bot)
             const permissionOverwrites = [
                 {
                     id: guild.roles.everyone.id,
@@ -364,10 +365,25 @@ client.on('interactionCreate', async (interaction) => {
                 }
             ];
 
-            // Wenn eine Admin-Rolle existiert, füge sie dem Ticket-Kanal hinzu
+            // Wenn "Admin" Rolle existiert, füge sie dem Ticket-Kanal hinzu
             if (adminRole) {
                 permissionOverwrites.push({
                     id: adminRole.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.AttachFiles,
+                        PermissionFlagsBits.EmbedLinks,
+                        PermissionFlagsBits.ManageChannels
+                    ]
+                });
+            }
+
+            // Wenn "Head Admin" Rolle existiert, füge sie dem Ticket-Kanal hinzu
+            if (headAdminRole) {
+                permissionOverwrites.push({
+                    id: headAdminRole.id,
                     allow: [
                         PermissionFlagsBits.ViewChannel,
                         PermissionFlagsBits.SendMessages,
@@ -412,10 +428,11 @@ client.on('interactionCreate', async (interaction) => {
 
             const row = new ActionRowBuilder().addComponents(closeButton);
 
-            // Nachricht senden
+            // Ping-String zusammenbauen
             let contentString = `${member}`;
-            if (pingAdmin && adminRole) {
-                contentString += ` | ${adminRole}`;
+            if (pingAdmin) {
+                if (adminRole) contentString += ` | ${adminRole}`;
+                if (headAdminRole) contentString += ` | ${headAdminRole}`;
             }
 
             await ticketChannel.send({
@@ -451,39 +468,61 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 4. INTERAKTIVES CHAT-CHECKING (Falls User im Transfer-Ticket "TRANSFER FEHLER BESTÄTIGT" schreibt)
+// 4. INTERAKTIVES CHAT-CHECKING (Verzögerte Pings über Texteingaben)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Prüfen, ob die Nachricht in einem Ticket-Kanal aus unserer Kategorie gesendet wurde
     if (message.channel.parentId === CONFIG.CATEGORY_ID) {
         const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
+        const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
        
         // Regel für Transfer-Tickets
         if (message.channel.name.startsWith('transfer-')) {
             if (message.content.toUpperCase().includes('TRANSFER FEHLER BESTÄTIGT')) {
+                let pingContent = `🔔 **Admin-Benachrichtigung:** Ein Fehler wurde bestätigt. `;
+                const mentions = [];
+               
                 if (adminRole) {
-                    await message.reply({
-                        content: `🔔 **Admin-Benachrichtigung:** Ein Fehler wurde bestätigt. ${adminRole}, bitte prüfen!`,
-                        allowedMentions: { roles: [adminRole.id] }
-                    });
-                } else {
-                    await message.reply('Fehler wurde bestätigt. (Keine Admin-Rolle auf dem Server gefunden, um sie zu pingen!)');
+                    pingContent += `${adminRole} `;
+                    mentions.push(adminRole.id);
                 }
+                if (headAdminRole) {
+                    pingContent += `${headAdminRole} `;
+                    mentions.push(headAdminRole.id);
+                }
+               
+                pingContent += `, bitte prüfen!`;
+
+                await message.reply({
+                    content: pingContent,
+                    allowedMentions: { roles: mentions }
+                });
             }
         }
 
-        // Regel für Website-Tickets (Ping bei weiterer Aktivität nach KI-Vorschlägen)
+        // Regel für Website-Tickets
         if (message.channel.name.startsWith('website-')) {
-            // Wenn der User nach der ersten Nachricht erneut schreibt (außer System-Antworten), benachrichtigen wir den Admin
             const messages = await message.channel.messages.fetch({ limit: 5 });
             const userMessages = messages.filter(m => !m.author.bot);
            
-            // Wenn das die zweite Nachricht des Users ist (er hat also nach den Tipps weitergeschrieben)
-            if (userMessages.size === 2 && adminRole) {
+            if (userMessages.size === 2) {
+                let pingContent = `🔔 **Admin-Benachrichtigung:** Die Standard-Lösungsschritte haben nicht geholfen. `;
+                const mentions = [];
+               
+                if (adminRole) {
+                    pingContent += `${adminRole} `;
+                    mentions.push(adminRole.id);
+                }
+                if (headAdminRole) {
+                    pingContent += `${headAdminRole} `;
+                    mentions.push(headAdminRole.id);
+                }
+               
+                pingContent += `, bitte übernehmen!`;
+
                 await message.reply({
-                    content: `🔔 **Admin-Benachrichtigung:** Die Standard-Lösungsschritte haben nicht geholfen. ${adminRole}, bitte übernehmen!`,
-                    allowedMentions: { roles: [adminRole.id] }
+                    content: pingContent,
+                    allowedMentions: { roles: mentions }
                 });
             }
         }
