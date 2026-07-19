@@ -13,13 +13,25 @@ const {
     TextInputStyle
 } = require('discord.js');
 const https = require('https');
+const express = require('express'); // Express hinzufügen, um Render-Port-Timeout zu verhindern
 
-// Status-Logs beim Starten
 console.log("==================================================");
 console.log("VGPL Germany Support-Bot mit Gemini-Regelwerk-KI wird gestartet...");
 console.log("==================================================");
 
-// Bot-Client initialisieren
+// 1. WEBSERVER EINRICHTEN (Verhindert den Render-Port-Timeout-Fehler!)
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/', (req, res) => {
+    res.send('VGPL Germany Support-Bot läuft fehlerfrei und ist online!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Webserver erfolgreich aktiv auf Port ${PORT}`);
+});
+
+// 2. BOT-CLIENT INITIALISIEREN
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -121,10 +133,10 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
     }
 
-    // Zurückwechseln auf die v1beta-API, da diese systemInstruction nativ unterstützt
+    // Wir nutzen das stabile v1 Beta-Modell für volle SystemInstruction-Kompatibilität
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
-    // Payload für die v1beta mit dem korrekten CamelCase "systemInstruction"
+    // Die korrekte Struktur für das Google-System-Prompt
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
         systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
