@@ -1,103 +1,4 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    EmbedBuilder, 
-    PermissionFlagsBits, 
-    ChannelType,
-    StringSelectMenuBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle
-} = require('discord.js');
-const https = require('https');
-const express = require('express');
-
-// WICHTIG: Diese Zeilen zeigen dir in den Render-Logs sofort an, ob der NEUESTE Code aktiv ist!
-console.log("==================================================");
-console.log("!!! UNZERSTÖRBARER CODE (VERSION 4.0) STARTET !!!");
-console.log("==================================================");
-
-// 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-    res.send('VGPL Germany Support-Bot läuft fehlerfrei und ist online!');
-});
-
-app.listen(PORT, () => {
-    console.log(`Webserver erfolgreich aktiv auf Port ${PORT}`);
-});
-
-// 2. BOT-CLIENT INITIALISIEREN
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
-
-// EXAKTE KANAL- UND KATEGORIE-KONFIGURATION
-const CONFIG = {
-    TOKEN: process.env.DISCORD_TOKEN,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
-    PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für Support-Panel (#hilfe)
-    CATEGORY_ID: '1527708420788977674', // Kategorie für Support-Tickets
-    ADMIN_ROLE_NAME: 'Admin',
-    HEAD_ADMIN_ROLE_NAME: 'Head Admin'
-};
-
-// Das exklusive Wissen der VGPL Germany basierend auf dem Regelwerk
-const VGPL_KNOWLEDGE = `
-Du bist der offizielle, hochprofessionelle KI-Support-Assistent der VGPL Germany (virtual Gaming Premier League). 
-Deine Aufgabe ist es, Usern in Support-Tickets schnell, freundlich, sportlich und extrem präzise basierend auf dem offiziellen Regelwerk (Stand: FC 26 Saison 1) zu helfen.
-
-ALLGEMEINE INFORMATIONEN:
-- Liga: virtual Gaming Premier League (VGPL Germany).
-- Spiel: EA SPORTS FC Pro Clubs (Crossplay auf PS5, Xbox Series X/S und PC).
-- Website: https://virtualgamingpremierleague.com
-- Kommunikationswege: VGPL Website, Discord, offizielle Social-Media-Kanäle.
-
-OFFIZIELLES LIGAREGELWERK (WICHTIGSTE PARAGRAPHEN):
-
-§3 VEREINE:
-- Benötigt: 1 Manager, 1 stellvertretenden Manager, mindestens 7 active Spieler.
-
-§4 SPIELERREGISTRIERUNG & TRANSFERS:
-- Nur ein VGPL-Konto pro Spieler erlaubt. Multi-Accounts sind strengstens verboten (führen zu permanentem Bann).
-- Pro Saison darf ein Spieler nur für einen Verein aktiv sein.
-- Maximal 3 Transfers pro Saison sind standardmäßig erlaubt. Transfers sind nur innerhalb offizieller Transferphasen erlaubt, die von der Ligaleitung festgelegt werden.
-
-§6 SPIELBETRIEB:
-- Antrittspflicht: Teams müssen zum angesetzten Termin spielen.
-- Mindestspielerzahl: Ein Spiel darf mit mindestens 7 Spielern begonnen werden.
-- Verspätung: Wartezeit bis zu 10 Minuten. Danach kann ein Antrag auf 0:3 Wertung gestellt werden.
-
-§7 VERBINDUNGSABBRÜCHE:
-- Vor Spielbeginn: Neustart des Spiels.
-- Innerhalb der ersten 10 Minuten: Wenn kein Tor gefallen ist und kein Platzverweis vorliegt, wird das Spiel wiederholt. Falls bereits ein Tor oder Platzverweis vorliegt, entscheidet die Ligaleitung.
-- Nach der 10. Minute: Die Ligaleitung entscheidet anhand der Situation, des Spielstands, der Beweise und des Fairplay-Gedankens.
-
-§17 GRÖSSENLIMITS (ZUR CHANCENGLEICHHEIT - EXTREM WICHTIG!):
-- Innenverteidiger (IV): Maximal 1,87 m groß.
-- Alle übrigen Feldspieler (inklusive ZDM, ZOM, ST etc.): Maximal 1,82 m groß.
-- Torhüter: Keine Größenbeschränkung.
-- Formationsregelungen:
-  • 3er-Kette: maximal 3 Innenverteidiger mit 1,87 m.
-  • 4er-Kette: maximal 2 Innenverteidiger mit 1,87 m; zusätzlich darf 1 ZDM 1,87 m groß sein.
-  • 5er-Kette: maximal 3 Innenverteidiger mit 1,87 m.
-- Sanktionen bei Verstoß: Erstverstoß = Verwarnung; Zweitverstoß = 0:3 Spielwertung gegen das Team; Vorsatz = 4 Wochen Sperre; wiederholter Betrug = Saison-Ausschluss.
-
-§18 GESCHLECHTERREGELUNG:
-- Das Pro Clubs Spieler-Geschlecht im Spiel muss dem tatsächlichen Geschlecht des echten Spielers entsprechen. (Verstoß: Verwarnung -> 1 Spiel Sperre -> 4 Wochen Sperre).
-
-§19 STREAMPLICHT:
-- Alle Ligaspiele müssen live auf Twitch, YouTube oder Kick übertragen werden.
-- Streamlink spätestens 5 Minuten vor Anpfiff im Discord posten.
+.
 - VOD (Video on Demand) muss mindestens 48 Stunden öffentlich gespeichert bleiben.
 - Spielstand und Gegnername müssen im Stream erkennbar sein.
 - Verstoß: Verwarnung -> Zweitverstoß: 0:3 Wertung.
@@ -126,24 +27,27 @@ DEINE VERHALTENSREGELN ALS KI:
 - Gib bei Fehlern auf der Website immer erst klassische KI-Tipps (Cache & Cookies löschen, Inkognito-Modus, Browser wechseln), bevor du Admins einschaltest.
 `;
 
-// Hilfsfunktion zur Kommunikation mit der Gemini-API mit automatischem Modell-Wechsel bei Fehlern
+// Hilfsfunktion zur Kommunikation mit der Gemini-API mit Live-Diagnoseausgabe im Fehlerfall
 async function askGemini(userQuery) {
-    const apiKey = CONFIG.GEMINI_API_KEY;
+    let apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
         return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    // Die Liste aller Modelle, die wir der Reihe nach durchprobieren, falls eines fehlschlägt
+    // Falls aus Versehen Leerzeichen mitkopiert wurden, bereinigen wir diese hier automatisch!
+    apiKey = apiKey.trim();
+
     const modelsToTry = [
-        'gemini-2.5-flash',
         'gemini-1.5-flash',
+        'gemini-2.5-flash',
         'gemini-1.5-pro'
     ];
 
-    // Innere rekursive Funktion, um die Modelle nacheinander abzuarbeiten
+    let lastErrorDetails = "";
+
     const tryModelRequest = async (modelIndex) => {
         if (modelIndex >= modelsToTry.length) {
-            return "Ich habe gerade eine kleine Denkpause. (Alle verfügbaren Gemini-Modelle schlugen fehl. Bitte überprüfe deinen API-Key.)";
+            return `Ich habe gerade eine kleine Denkpause. (Google meldete: ${lastErrorDetails || "API-Schlüssel ungültig oder unvollständig kopiert. Bitte hole dir einen neuen bei Google AI Studio!"})`;
         }
 
         const currentModel = modelsToTry[modelIndex];
@@ -169,8 +73,8 @@ async function askGemini(userQuery) {
                         const json = JSON.parse(data);
                         
                         if (res.statusCode !== 200) {
-                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen (Status ${res.statusCode}). Versuche nächstes Modell...`);
-                            // Versuche das nächste Modell in der Liste
+                            lastErrorDetails = json.error?.message || `Status ${res.statusCode}`;
+                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen: ${lastErrorDetails}`);
                             resolve(tryModelRequest(modelIndex + 1));
                             return;
                         }
@@ -182,12 +86,14 @@ async function askGemini(userQuery) {
                             resolve(tryModelRequest(modelIndex + 1));
                         }
                     } catch (e) {
+                        lastErrorDetails = e.message;
                         resolve(tryModelRequest(modelIndex + 1));
                     }
                 });
             });
 
             req.on('error', (err) => {
+                lastErrorDetails = err.message;
                 resolve(tryModelRequest(modelIndex + 1));
             });
 
@@ -196,7 +102,6 @@ async function askGemini(userQuery) {
         });
     };
 
-    // Starte den ersten Versuch mit dem ersten Modell (gemini-2.5-flash)
     return await tryModelRequest(0);
 }
 
