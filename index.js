@@ -121,13 +121,13 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
     }
 
-    // Verwendung der stabilen v1 API
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Zurückwechseln auf die v1beta-API, da diese systemInstruction nativ unterstützt
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
-    // WICHTIGE ÄNDERUNG: "system_instruction" statt "systemInstruction" für stabile Google v1 API-Kompatibilität!
+    // Payload für die v1beta mit dem korrekten CamelCase "systemInstruction"
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
-        system_instruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
+        systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
     });
 
     return new Promise((resolve) => {
