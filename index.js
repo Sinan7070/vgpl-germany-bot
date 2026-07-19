@@ -17,7 +17,7 @@ const express = require('express');
 
 // WICHTIG: Diese Zeilen zeigen dir in den Render-Logs sofort an, ob der NEUESTE Code aktiv ist!
 console.log("==================================================");
-console.log("!!! DER NEUESTE CODE (VERSION 3.0) STARTET JETZT !!!");
+console.log("!!! UNZERSTÖRBARER CODE (VERSION 4.0) STARTET !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
@@ -126,23 +126,35 @@ DEINE VERHALTENSREGELN ALS KI:
 - Gib bei Fehlern auf der Website immer erst klassische KI-Tipps (Cache & Cookies löschen, Inkognito-Modus, Browser wechseln), bevor du Admins einschaltest.
 `;
 
-// Hilfsfunktion zur Kommunikation mit der Gemini-API mit Exponential Backoff bei Fehlern
-async function askGemini(userQuery, retries = 5, delay = 1000) {
+// Hilfsfunktion zur Kommunikation mit der Gemini-API mit automatischem Modell-Wechsel bei Fehlern
+async function askGemini(userQuery) {
     const apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
         return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    // EXAKTER, STABILER UND STANDARDMÄSSIGER PFAD FÜR GOOGLE AI STUDIO KEYS
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    
-    const payload = JSON.stringify({
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
-    });
+    // Die Liste aller Modelle, die wir der Reihe nach durchprobieren, falls eines fehlschlägt
+    const modelsToTry = [
+        'gemini-2.5-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro'
+    ];
 
-    return new Promise((resolve) => {
-        const makeRequest = (currentRetry) => {
+    // Innere rekursive Funktion, um die Modelle nacheinander abzuarbeiten
+    const tryModelRequest = async (modelIndex) => {
+        if (modelIndex >= modelsToTry.length) {
+            return "Ich habe gerade eine kleine Denkpause. (Alle verfügbaren Gemini-Modelle schlugen fehl. Bitte überprüfe deinen API-Key.)";
+        }
+
+        const currentModel = modelsToTry[modelIndex];
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
+        
+        const payload = JSON.stringify({
+            contents: [{ parts: [{ text: userQuery }] }],
+            systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
+        });
+
+        return new Promise((resolve) => {
             const req = https.request(url, {
                 method: 'POST',
                 headers: {
@@ -157,13 +169,9 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         const json = JSON.parse(data);
                         
                         if (res.statusCode !== 200) {
-                            console.error(`[API FEHLER] Gemini API Status: ${res.statusCode}. Details:`, data);
-                            
-                            let errorReason = "Unbekannter Fehler";
-                            if (json.error && json.error.message) {
-                                errorReason = json.error.message;
-                            }
-                            resolve(`Ich habe gerade eine kleine Denkpause. (Technischer Fehler von Google: ${res.statusCode} - ${errorReason})`);
+                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen (Status ${res.statusCode}). Versuche nächstes Modell...`);
+                            // Versuche das nächste Modell in der Liste
+                            resolve(tryModelRequest(modelIndex + 1));
                             return;
                         }
 
@@ -171,34 +179,25 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         if (reply) {
                             resolve(reply);
                         } else {
-                            console.error("[FORMAT FEHLER] Ungültige JSON-Antwortstruktur von Google:", data);
-                            resolve("Ich habe gerade eine kleine Denkpause. (Technischer Fehler: Ungültiges Antwort-Format von Google)");
+                            resolve(tryModelRequest(modelIndex + 1));
                         }
                     } catch (e) {
-                        console.error("[PARSER FEHLER] Fehler beim Parsen der Antwort:", e);
-                        resolve(`Ich habe gerade eine kleine Denkpause. (Technischer Fehler beim Lesen der Antwort: ${e.message})`);
+                        resolve(tryModelRequest(modelIndex + 1));
                     }
                 });
             });
 
-            const handleError = (err) => {
-                if (currentRetry > 0) {
-                    const backoffTime = delay * Math.pow(2, 5 - currentRetry);
-                    console.log(`Verbindungsfehler zur API. Erneuter Versuch in ${backoffTime}ms...`);
-                    setTimeout(() => makeRequest(currentRetry - 1), backoffTime);
-                } else {
-                    console.error("Gemini-API vollständig fehlgeschlagen nach allen Versuchen:", err);
-                    resolve(`Ich habe gerade eine kleine Denkpause. (Verbindungsfehler zur Google-API: ${err.message})`);
-                }
-            };
+            req.on('error', (err) => {
+                resolve(tryModelRequest(modelIndex + 1));
+            });
 
-            req.on('error', handleError);
             req.write(payload);
             req.end();
-        };
+        });
+    };
 
-        makeRequest(retries);
-    });
+    // Starte den ersten Versuch mit dem ersten Modell (gemini-2.5-flash)
+    return await tryModelRequest(0);
 }
 
 // Event: Bot ist bereit und richtet das Support-Panel ein
