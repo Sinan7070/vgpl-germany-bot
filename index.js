@@ -15,9 +15,8 @@ const {
 const https = require('https');
 const express = require('express');
 
-// WICHTIG: Diese Zeilen zeigen dir in den Render-Logs sofort an, ob der NEUESTE Code aktiv ist!
 console.log("==================================================");
-console.log("!!! UNZERSTÖRBARER CODE (VERSION 4.0) STARTET !!!");
+console.log("!!! UNZERSTÖRBARER CODE MIT DIAGNOSE STARTET !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
@@ -126,24 +125,27 @@ DEINE VERHALTENSREGELN ALS KI:
 - Gib bei Fehlern auf der Website immer erst klassische KI-Tipps (Cache & Cookies löschen, Inkognito-Modus, Browser wechseln), bevor du Admins einschaltest.
 `;
 
-// Hilfsfunktion zur Kommunikation mit der Gemini-API mit automatischem Modell-Wechsel bei Fehlern
+// Hilfsfunktion zur Kommunikation mit der Gemini-API mit Live-Diagnoseausgabe im Fehlerfall
 async function askGemini(userQuery) {
-    const apiKey = CONFIG.GEMINI_API_KEY;
+    let apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
         return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    // Die Liste aller Modelle, die wir der Reihe nach durchprobieren, falls eines fehlschlägt
+    // Falls aus Versehen Leerzeichen mitkopiert wurden, bereinigen wir diese hier automatisch!
+    apiKey = apiKey.trim();
+
     const modelsToTry = [
-        'gemini-2.5-flash',
         'gemini-1.5-flash',
+        'gemini-2.5-flash',
         'gemini-1.5-pro'
     ];
 
-    // Innere rekursive Funktion, um die Modelle nacheinander abzuarbeiten
+    let lastErrorDetails = "";
+
     const tryModelRequest = async (modelIndex) => {
         if (modelIndex >= modelsToTry.length) {
-            return "Ich habe gerade eine kleine Denkpause. (Alle verfügbaren Gemini-Modelle schlugen fehl. Bitte überprüfe deinen API-Key.)";
+            return `Ich habe gerade eine kleine Denkpause. (Google meldete: ${lastErrorDetails || "API-Schlüssel ungültig oder unvollständig kopiert. Bitte hole dir einen neuen bei Google AI Studio!"})`;
         }
 
         const currentModel = modelsToTry[modelIndex];
@@ -169,8 +171,8 @@ async function askGemini(userQuery) {
                         const json = JSON.parse(data);
                         
                         if (res.statusCode !== 200) {
-                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen (Status ${res.statusCode}). Versuche nächstes Modell...`);
-                            // Versuche das nächste Modell in der Liste
+                            lastErrorDetails = json.error?.message || `Status ${res.statusCode}`;
+                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen: ${lastErrorDetails}`);
                             resolve(tryModelRequest(modelIndex + 1));
                             return;
                         }
@@ -182,12 +184,14 @@ async function askGemini(userQuery) {
                             resolve(tryModelRequest(modelIndex + 1));
                         }
                     } catch (e) {
+                        lastErrorDetails = e.message;
                         resolve(tryModelRequest(modelIndex + 1));
                     }
                 });
             });
 
             req.on('error', (err) => {
+                lastErrorDetails = err.message;
                 resolve(tryModelRequest(modelIndex + 1));
             });
 
@@ -196,7 +200,6 @@ async function askGemini(userQuery) {
         });
     };
 
-    // Starte den ersten Versuch mit dem ersten Modell (gemini-2.5-flash)
     return await tryModelRequest(0);
 }
 
