@@ -114,10 +114,12 @@ DEINE VERHALTENSREGELN ALS KI:
 async function askGemini(userQuery, retries = 5, delay = 1000) {
     const apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
+        console.error("Gemini Fehler: Kein GEMINI_API_KEY in Render-Umgebungsvariablen gefunden!");
         return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // Nutzen des super-stabilen, weltweit kostenfrei verfügbaren Modells gemini-1.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
@@ -138,13 +140,22 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                 res.on('end', () => {
                     try {
                         const json = JSON.parse(data);
+                        
+                        if (res.statusCode !== 200) {
+                            console.error(`Gemini API lieferte Statuscode ${res.statusCode}. Antwort-Details:`, data);
+                            handleError(new Error(`API Error Status ${res.statusCode}`));
+                            return;
+                        }
+
                         const reply = json.candidates?.[0]?.content?.parts?.[0]?.text;
                         if (reply) {
                             resolve(reply);
                         } else {
-                            handleError(new Error("Ungültiges API-Format von Google erhalten."));
+                            console.error("Gemini API ungültige Antwortstruktur:", data);
+                            handleError(new Error("Ungültiges Antwort-Format"));
                         }
                     } catch (e) {
+                        console.error("Fehler beim Parsen der Gemini-Antwort:", e);
                         handleError(e);
                     }
                 });
@@ -152,8 +163,10 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
 
             const handleError = (err) => {
                 if (currentRetry > 0) {
+                    console.log(`Verbindungsfehler zur Gemini-API. Erneuter Versuch in ${delay * Math.pow(2, 5 - currentRetry)}ms...`);
                     setTimeout(() => makeRequest(currentRetry - 1), delay * Math.pow(2, 5 - currentRetry));
                 } else {
+                    console.error("Gemini-API vollständig fehlgeschlagen nach allen Versuchen:", err);
                     resolve("Ich habe gerade eine kleine Denkpause. Ein Admin wurde benachrichtigt und hilft dir gleich persönlich weiter!");
                 }
             };
@@ -506,7 +519,7 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Nur in der Support-Ticket-Kategorie oder auf Ticket-Kanäle reagieren
+    // Erkennen, ob die Nachricht in einem Ticket-Kanal geschrieben wurde
     const isTicketChannel = message.channel.name && (
         message.channel.name.startsWith('transfer-') ||
         message.channel.name.startsWith('ergebnis-') ||
