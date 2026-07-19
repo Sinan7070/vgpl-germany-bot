@@ -14,9 +14,12 @@ const {
 } = require('discord.js');
 const https = require('https');
 
+// WICHTIG: Diese Zeile zeigt dir in den Render-Logs sofort an, ob der NEUE Code aktiv ist!
+console.log("==================================================");
 console.log("VGPL Germany Support-Bot mit Gemini-Regelwerk-KI wird gestartet...");
+console.log("==================================================");
 
-// Bot-Client initialisieren
+// Bot-Client mit allen notwendigen Intents initialisieren
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -25,17 +28,17 @@ const client = new Client({
     ]
 });
 
-// EXAKTE KANAL- UND KATEGORIE-KONFIGURATION FÜR DEN SUPPORT-BOT
+// EXAKTE KANAL- UND KATEGORIE-KONFIGURATION
 const CONFIG = {
-    TOKEN: process.env.DISCORD_TOKEN, // In den Render-Environment Variables eingetragen
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "", // Der Gemini API Key (wird in Render eingetragen)
+    TOKEN: process.env.DISCORD_TOKEN, // Wird aus den Render-Umgebungsvariablen geladen
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "", // Der Gemini API Key aus Render
     PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für Support-Panel (#hilfe)
     CATEGORY_ID: '1527708420788977674', // Kategorie für Support-Tickets
     ADMIN_ROLE_NAME: 'Admin', // Genauer Name der Admin-Rolle
     HEAD_ADMIN_ROLE_NAME: 'Head Admin' // Genauer Name der Head-Admin-Rolle
 };
 
-// Das exklusive Wissen der VGPL Germany basierend auf dem hochgeladenen PDF-Regelwerk
+// Das exklusive Wissen der VGPL Germany basierend auf dem Regelwerk
 const VGPL_KNOWLEDGE = `
 Du bist der offizielle, hochprofessionelle KI-Support-Assistent der VGPL Germany (virtual Gaming Premier League). 
 Deine Aufgabe ist es, Usern in Support-Tickets schnell, freundlich, sportlich und extrem präzise basierend auf dem offiziellen Regelwerk (Stand: FC 26 Saison 1) zu helfen.
@@ -118,7 +121,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
     }
 
-    // Nutzen des super-stabilen, weltweit kostenfrei verfügbaren Modells gemini-1.5-flash
+    // Verwendung des stabilen Gemini 1.5 Flash Modells
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const payload = JSON.stringify({
@@ -142,7 +145,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         const json = JSON.parse(data);
                         
                         if (res.statusCode !== 200) {
-                            console.error(`Gemini API lieferte Statuscode ${res.statusCode}. Antwort-Details:`, data);
+                            console.error(`[API FEHLER] Gemini API Status: ${res.statusCode}. Details:`, data);
                             handleError(new Error(`API Error Status ${res.statusCode}`));
                             return;
                         }
@@ -151,11 +154,11 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         if (reply) {
                             resolve(reply);
                         } else {
-                            console.error("Gemini API ungültige Antwortstruktur:", data);
+                            console.error("[FORMAT FEHLER] Ungültige JSON-Antwortstruktur von Google:", data);
                             handleError(new Error("Ungültiges Antwort-Format"));
                         }
                     } catch (e) {
-                        console.error("Fehler beim Parsen der Gemini-Antwort:", e);
+                        console.error("[PARSER FEHLER] Fehler beim Parsen der Antwort:", e);
                         handleError(e);
                     }
                 });
@@ -163,10 +166,11 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
 
             const handleError = (err) => {
                 if (currentRetry > 0) {
-                    console.log(`Verbindungsfehler zur Gemini-API. Erneuter Versuch in ${delay * Math.pow(2, 5 - currentRetry)}ms...`);
-                    setTimeout(() => makeRequest(currentRetry - 1), delay * Math.pow(2, 5 - currentRetry));
+                    const backoffTime = delay * Math.pow(2, 5 - currentRetry);
+                    console.log(`Verbindungsfehler zur API. Erneuter Versuch in ${backoffTime}ms...`);
+                    setTimeout(() => makeRequest(currentRetry - 1), backoffTime);
                 } else {
-                    console.error("Gemini-API vollständig fehlgeschlagen nach allen Versuchen:", err);
+                    console.error("Gemini-API vollständig fehlgeschlagen nach 5 Versuchen:", err);
                     resolve("Ich habe gerade eine kleine Denkpause. Ein Admin wurde benachrichtigt und hilft dir gleich persönlich weiter!");
                 }
             };
@@ -180,7 +184,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
     });
 }
 
-// Event: Bot ist bereit
+// Event: Bot ist bereit und richtet das Support-Panel ein
 client.once('ready', async () => {
     console.log(`Erfolgreich eingeloggt als ${client.user.tag}!`);
 
@@ -417,7 +421,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         try {
-            // Berechtigungen aufsetzen
+            // Berechtigungen aufsetzen (Admins, Bot & Ticket-Ersteller)
             const permissionOverwrites = [
                 { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
                 { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
@@ -467,7 +471,7 @@ client.on('interactionCreate', async (interaction) => {
 
             const row = new ActionRowBuilder().addComponents(closeButton);
 
-            // Alles senden
+            // Alles im Ticket senden
             await ticketChannel.send({
                 content: `${member}`,
                 embeds: [infoEmbed, aiEmbed],
@@ -539,7 +543,7 @@ client.on('messageCreate', async (message) => {
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
 
-            // Sicherstellen, dass wir die Collection korrekt in ein Array umwandeln und umdrehen
+            // SICHERHEITSHINWEIS: Collections von discord.js müssen in Arrays umgewandelt werden, bevor sie umgedreht werden können!
             const msgArray = Array.from(rawMessages.values()).reverse();
 
             msgArray.forEach(msg => {
