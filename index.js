@@ -142,7 +142,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         if (reply) {
                             resolve(reply);
                         } else {
-                            handleError(new Error("Ungültiges API-Format"));
+                            handleError(new Error("Ungültiges API-Format von Google erhalten."));
                         }
                     } catch (e) {
                         handleError(e);
@@ -154,7 +154,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                 if (currentRetry > 0) {
                     setTimeout(() => makeRequest(currentRetry - 1), delay * Math.pow(2, 5 - currentRetry));
                 } else {
-                    resolve("Es gab ein kleines Verbindungsproblem mit meinem KI-Support-Gehirn. Ein Admin wurde benachrichtigt und wird gleich für dich da sein!");
+                    resolve("Ich habe gerade eine kleine Denkpause. Ein Admin wurde benachrichtigt und hilft dir gleich persönlich weiter!");
                 }
             };
 
@@ -506,47 +506,71 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Nur in der Support-Ticket-Kategorie auf Chats reagieren
-    if (message.channel.parentId === CONFIG.CATEGORY_ID) {
-        // Ladeanzeige (Bot tippt...) aktivieren
-        await message.channel.sendTyping();
+    // Nur in der Support-Ticket-Kategorie oder auf Ticket-Kanäle reagieren
+    const isTicketChannel = message.channel.name && (
+        message.channel.name.startsWith('transfer-') ||
+        message.channel.name.startsWith('ergebnis-') ||
+        message.channel.name.startsWith('verstoss-') ||
+        message.channel.name.startsWith('website-') ||
+        message.channel.name.startsWith('profil-') ||
+        message.channel.name.startsWith('disconnect-') ||
+        message.channel.name.startsWith('sonstiges-')
+    );
 
-        // Verlauf laden für besseren Kontext
-        const rawMessages = await message.channel.messages.fetch({ limit: 12 });
-        const contextLines = [];
+    if (message.channel.parentId === CONFIG.CATEGORY_ID || isTicketChannel) {
+        try {
+            // Ladeanzeige (Bot tippt...) aktivieren
+            await message.channel.sendTyping();
 
-        // Chronologische Reihenfolge aufbauen (älteste zuerst)
-        rawMessages.reverse().forEach(msg => {
-            const authorName = msg.author.bot ? "KI-Assistent" : msg.author.username;
-            contextLines.push(`${authorName}: ${msg.content}`);
-        });
+            // Verlauf laden für besseren Kontext
+            const rawMessages = await message.channel.messages.fetch({ limit: 12 });
+            const contextLines = [];
 
-        const promptText = `Es gibt einen neuen Chatverlauf in einem VGPL-Support-Ticket. Antworte auf die letzte Nachricht von ${message.author.username}.\n\nBisheriger Verlauf:\n${contextLines.join('\n')}\n\nAntwort des KI-Assistenten:`;
+            // Sicherstellen, dass wir die Collection korrekt in ein Array umwandeln und umdrehen
+            const msgArray = Array.from(rawMessages.values()).reverse();
 
-        // KI fragen
-        const aiRawReply = await askGemini(promptText);
-        const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
-
-        // Antwort senden
-        await message.reply({ content: aiCleanReply });
-
-        // Wenn die KI merkt, dass ein Mensch eingreifen soll (Befehl im Text enthalten)
-        if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
-            const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
-            const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
-
-            let alertString = `🔔 **Admin-Support wurde hinzugerufen:** `;
-            const mentions = [];
-            if (adminRole) { alertString += `${adminRole} `; mentions.push(adminRole.id); }
-            if (headAdminRole) { alertString += `${headAdminRole} `; mentions.push(headAdminRole.id); }
-            alertString += `, bitte übernehmen!`;
-
-            await message.channel.send({
-                content: alertString,
-                allowedMentions: { roles: mentions }
+            msgArray.forEach(msg => {
+                const authorName = msg.author.bot ? "KI-Assistent" : msg.author.username;
+                contextLines.push(`${authorName}: ${msg.content}`);
             });
+
+            const promptText = `Es gibt einen neuen Chatverlauf in einem VGPL-Support-Ticket. Antworte auf die letzte Nachricht von ${message.author.username}.\n\nBisheriger Verlauf:\n${contextLines.join('\n')}\n\nAntwort des KI-Assistenten:`;
+
+            // KI fragen
+            const aiRawReply = await askGemini(promptText);
+            const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
+
+            // Antwort senden
+            await message.reply({ content: aiCleanReply });
+
+            // Wenn die KI merkt, dass ein Mensch eingreifen soll (Befehl im Text enthalten)
+            if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
+                const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
+                const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
+
+                let alertString = `🔔 **Admin-Support wurde hinzugerufen:** `;
+                const mentions = [];
+                if (adminRole) { alertString += `${adminRole} `; mentions.push(adminRole.id); }
+                if (headAdminRole) { alertString += `${headAdminRole} `; mentions.push(headAdminRole.id); }
+                alertString += `, bitte übernehmen!`;
+
+                await message.channel.send({
+                    content: alertString,
+                    allowedMentions: { roles: mentions }
+                });
+            }
+        } catch (error) {
+            console.error("Fehler bei der Nachrichtenverarbeitung im Support-Ticket:", error);
         }
     }
+});
+
+// Sicherheitsnetz für unerwartete Fehler (damit der Bot niemals abstürzt)
+process.on('unhandledRejection', error => {
+    console.error('Unerwarteter unbehandelter Fehler:', error);
+});
+process.on('uncaughtException', error => {
+    console.error('Unerwartete Ausnahme:', error);
 });
 
 // Login
