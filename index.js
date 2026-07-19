@@ -50,14 +50,11 @@ const CONFIG = {
     HEAD_ADMIN_ROLE_NAME: 'Head Admin'
 };
 
-// Diagnose beim Starten: Zeigt an, ob ein gültiger AI-Studio-Schlüssel geladen wurde
+// Diagnose beim Starten
 if (CONFIG.GEMINI_API_KEY) {
     const keyStart = CONFIG.GEMINI_API_KEY.substring(0, 6);
     const keyEnd = CONFIG.GEMINI_API_KEY.substring(CONFIG.GEMINI_API_KEY.length - 4);
     console.log(`[DIAGNOSE] Geladener API-Schlüssel (gekürzt): ${keyStart}...${keyEnd}`);
-    if (!keyStart.startsWith("AIzaSy")) {
-        console.warn("[WARNUNG] Dein API-Schlüssel beginnt NICHT mit 'AIzaSy'. Ein korrekter Google AI Studio Schlüssel muss immer mit 'AIzaSy' beginnen! Bitte überprüfe deine Umgebungsvariablen in Render.");
-    }
 } else {
     console.error("[FEHLER] Kein GEMINI_API_KEY in Render eingetragen!");
 }
@@ -144,7 +141,8 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // WICHTIGE ANPASSUNG: "gemini-1.5-flash-latest" anstelle von "gemini-1.5-flash" für die v1beta API!
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
@@ -169,7 +167,6 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         if (res.statusCode !== 200) {
                             console.error(`[API FEHLER] Gemini API Status: ${res.statusCode}. Details:`, data);
                             
-                            // EXTREM WICHTIG FÜR DIAGNOSE: Schreibt den Fehler direkt verständlich in Discord!
                             let errorReason = "Unbekannter Fehler";
                             if (json.error && json.error.message) {
                                 errorReason = json.error.message;
@@ -449,7 +446,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         try {
-            // Berechtigungen aufsetzen (Admins, Bot & Ticket-Ersteller)
+            // Berechtigungen aufsetzen
             const permissionOverwrites = [
                 { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
                 { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
@@ -472,7 +469,7 @@ client.on('interactionCreate', async (interaction) => {
                 topic: `Support-Ticket von ${member.user.tag}`
             });
 
-            // Info-Embed mit den Formulardaten erstellen
+            // Info-Embed
             const infoEmbed = new EmbedBuilder()
                 .setTitle(embedTitle)
                 .setDescription(`Dieses Ticket wurde von ${member} geöffnet.`)
@@ -547,7 +544,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 4. LIVE CHAT-KONTROLLE MIT DER GEMINI-KI (Antwortet auf jede Nachricht im Ticket)
+// 4. LIVE CHAT-KONTROLLE MIT DER GEMINI-KI
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
@@ -564,14 +561,12 @@ client.on('messageCreate', async (message) => {
 
     if (message.channel.parentId === CONFIG.CATEGORY_ID || isTicketChannel) {
         try {
-            // Ladeanzeige (Bot tippt...) aktivieren
             await message.channel.sendTyping();
 
-            // Verlauf laden für besseren Kontext
+            // Verlauf laden
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
 
-            // Collections in Array umwandeln und umdrehen
             const msgArray = Array.from(rawMessages.values()).reverse();
 
             msgArray.forEach(msg => {
@@ -585,10 +580,9 @@ client.on('messageCreate', async (message) => {
             const aiRawReply = await askGemini(promptText);
             const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
 
-            // Antwort senden
             await message.reply({ content: aiCleanReply });
 
-            // Wenn die KI merkt, dass ein Mensch eingreifen soll (Befehl im Text enthalten)
+            // Wenn die KI merkt, dass ein Mensch eingreifen soll
             if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
                 const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
                 const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
@@ -610,7 +604,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Sicherheitsnetz für unerwartete Fehler (damit der Bot niemals abstürzt)
+// Sicherheitsnetz für unerwartete Fehler
 process.on('unhandledRejection', error => {
     console.error('Unerwarteter unbehandelter Fehler:', error);
 });
