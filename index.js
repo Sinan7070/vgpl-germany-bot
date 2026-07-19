@@ -14,12 +14,12 @@ const {
 } = require('discord.js');
 const https = require('https');
 
-// WICHTIG: Diese Zeile zeigt dir in den Render-Logs sofort an, ob der NEUE Code aktiv ist!
+// Status-Logs beim Starten
 console.log("==================================================");
 console.log("VGPL Germany Support-Bot mit Gemini-Regelwerk-KI wird gestartet...");
 console.log("==================================================");
 
-// Bot-Client mit allen notwendigen Intents initialisieren
+// Bot-Client initialisieren
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -121,8 +121,8 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
     }
 
-    // Verwendung des stabilen Gemini 1.5 Flash Modells
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Verwendung der stabilen v1 API mit dem exakten Modell-Endpunkt
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
@@ -170,7 +170,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                     console.log(`Verbindungsfehler zur API. Erneuter Versuch in ${backoffTime}ms...`);
                     setTimeout(() => makeRequest(currentRetry - 1), backoffTime);
                 } else {
-                    console.error("Gemini-API vollständig fehlgeschlagen nach 5 Versuchen:", err);
+                    console.error("Gemini-API vollständig fehlgeschlagen nach allen Versuchen:", err);
                     resolve("Ich habe gerade eine kleine Denkpause. Ein Admin wurde benachrichtigt und hilft dir gleich persönlich weiter!");
                 }
             };
@@ -543,7 +543,7 @@ client.on('messageCreate', async (message) => {
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
 
-            // SICHERHEITSHINWEIS: Collections von discord.js müssen in Arrays umgewandelt werden, bevor sie umgedreht werden können!
+            // Collections in Array umwandeln und umdrehen
             const msgArray = Array.from(rawMessages.values()).reverse();
 
             msgArray.forEach(msg => {
