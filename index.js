@@ -15,8 +15,9 @@ const {
 const https = require('https');
 const express = require('express');
 
+// WICHTIG: Diese Zeilen zeigen dir in den Render-Logs sofort an, ob der NEUESTE Code aktiv ist!
 console.log("==================================================");
-console.log("VGPL Germany Support-Bot mit Gemini-Regelwerk-KI wird gestartet...");
+console.log("!!! DER NEUESTE CODE (VERSION 3.0) STARTET JETZT !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
@@ -50,15 +51,6 @@ const CONFIG = {
     HEAD_ADMIN_ROLE_NAME: 'Head Admin'
 };
 
-// Diagnose beim Starten
-if (CONFIG.GEMINI_API_KEY) {
-    const keyStart = CONFIG.GEMINI_API_KEY.substring(0, 6);
-    const keyEnd = CONFIG.GEMINI_API_KEY.substring(CONFIG.GEMINI_API_KEY.length - 4);
-    console.log(`[DIAGNOSE] Geladener API-Schlüssel (gekürzt): ${keyStart}...${keyEnd}`);
-} else {
-    console.error("[FEHLER] Kein GEMINI_API_KEY in Render eingetragen!");
-}
-
 // Das exklusive Wissen der VGPL Germany basierend auf dem Regelwerk
 const VGPL_KNOWLEDGE = `
 Du bist der offizielle, hochprofessionelle KI-Support-Assistent der VGPL Germany (virtual Gaming Premier League). 
@@ -73,7 +65,7 @@ ALLGEMEINE INFORMATIONEN:
 OFFIZIELLES LIGAREGELWERK (WICHTIGSTE PARAGRAPHEN):
 
 §3 VEREINE:
-- Benötigt: 1 Manager, 1 stellvertretenden Manager, mindestens 7 aktive Spieler.
+- Benötigt: 1 Manager, 1 stellvertretenden Manager, mindestens 7 active Spieler.
 
 §4 SPIELERREGISTRIERUNG & TRANSFERS:
 - Nur ein VGPL-Konto pro Spieler erlaubt. Multi-Accounts sind strengstens verboten (führen zu permanentem Bann).
@@ -141,8 +133,8 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
         return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    // WICHTIGE ANPASSUNG: "gemini-1.5-flash-latest" anstelle von "gemini-1.5-flash" für die v1beta API!
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    // EXAKTER, STABILER UND STANDARDMÄSSIGER PFAD FÜR GOOGLE AI STUDIO KEYS
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
@@ -340,7 +332,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 2. MODAL ABGESCHICKT -> TICKET ERSTELLEN & ERSTKONTAKT PER KI GENERIEREN
+    // 2. MODAL ABGESCHICKT -> TICKET ERSTELLEN
     if (interaction.isModalSubmit()) {
         await interaction.deferReply({ ephemeral: true });
 
@@ -503,7 +495,6 @@ client.on('interactionCreate', async (interaction) => {
                 components: [row]
             });
 
-            // Falls die KI sofort merkt, dass sie Admins braucht
             if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
                 let alertString = `🔔 **Admin-Support benötigt:** `;
                 const mentions = [];
@@ -548,7 +539,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Erkennen, ob die Nachricht in einem Ticket-Kanal geschrieben wurde
     const isTicketChannel = message.channel.name && (
         message.channel.name.startsWith('transfer-') ||
         message.channel.name.startsWith('ergebnis-') ||
@@ -563,7 +553,6 @@ client.on('messageCreate', async (message) => {
         try {
             await message.channel.sendTyping();
 
-            // Verlauf laden
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
 
@@ -582,7 +571,6 @@ client.on('messageCreate', async (message) => {
 
             await message.reply({ content: aiCleanReply });
 
-            // Wenn die KI merkt, dass ein Mensch eingreifen soll
             if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
                 const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
                 const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
