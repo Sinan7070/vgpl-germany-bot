@@ -13,22 +13,20 @@ const {
     TextInputStyle
 } = require('discord.js');
 const https = require('https');
-const express = require('express');
+const http = require('http'); // Nutzen des nativen HTTP-Moduls (verhindert npm install Fehler!)
 
-// WICHTIG: Diese Zeilen zeigen dir in den Render-Logs sofort an, ob der NEUESTE Code aktiv ist!
 console.log("==================================================");
-console.log("!!! UNZERSTÖRBARER CODE (VERSION 4.0) STARTET !!!");
+console.log("!!! DER DEFINITIVE BOT (VERSION 6.0) STARTET !!!");
 console.log("==================================================");
 
-// 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
-const app = express();
-const PORT = process.env.PORT || 10000;
-
-app.get('/', (req, res) => {
-    res.send('VGPL Germany Support-Bot läuft fehlerfrei und ist online!');
+// 1. NATIVEN WEBSERVER STARTEN (Verhindert Render-Port-Timeout ohne extra npm-Pakete)
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('VGPL Germany Support-Bot läuft fehlerfrei und ist online!');
 });
 
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => {
     console.log(`Webserver erfolgreich aktiv auf Port ${PORT}`);
 });
 
@@ -126,78 +124,63 @@ DEINE VERHALTENSREGELN ALS KI:
 - Gib bei Fehlern auf der Website immer erst klassische KI-Tipps (Cache & Cookies löschen, Inkognito-Modus, Browser wechseln), bevor du Admins einschaltest.
 `;
 
-// Hilfsfunktion zur Kommunikation mit der Gemini-API mit automatischem Modell-Wechsel bei Fehlern
+// Hilfsfunktion zur Kommunikation mit der Gemini-API mit Live-Fehlerdiagnose in Discord
 async function askGemini(userQuery) {
-    const apiKey = CONFIG.GEMINI_API_KEY;
+    let apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
-        return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
+        return "🤖 [VGPL KI v6.0] Fehler: Kein API-Schlüssel in Render eingetragen!";
     }
 
-    // Die Liste aller Modelle, die wir der Reihe nach durchprobieren, falls eines fehlschlägt
-    const modelsToTry = [
-        'gemini-2.5-flash',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro'
-    ];
+    apiKey = apiKey.trim(); // Entfernt eventuelle Leerzeichen aus Versehen beim Kopieren
 
-    // Innere rekursive Funktion, um die Modelle nacheinander abzuarbeiten
-    const tryModelRequest = async (modelIndex) => {
-        if (modelIndex >= modelsToTry.length) {
-            return "Ich habe gerade eine kleine Denkpause. (Alle verfügbaren Gemini-Modelle schlugen fehl. Bitte überprüfe deinen API-Key.)";
-        }
+    // Der absolut sicherste und stabilste API-Pfad für freie AI-Studio Keys
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const payload = JSON.stringify({
+        contents: [{ parts: [{ text: userQuery }] }],
+        systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
+    });
 
-        const currentModel = modelsToTry[modelIndex];
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
-        
-        const payload = JSON.stringify({
-            contents: [{ parts: [{ text: userQuery }] }],
-            systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
-        });
-
-        return new Promise((resolve) => {
-            const req = https.request(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(payload)
-                }
-            }, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        const json = JSON.parse(data);
-                        
-                        if (res.statusCode !== 200) {
-                            console.warn(`[WARNUNG] Modell ${currentModel} fehlgeschlagen (Status ${res.statusCode}). Versuche nächstes Modell...`);
-                            // Versuche das nächste Modell in der Liste
-                            resolve(tryModelRequest(modelIndex + 1));
-                            return;
-                        }
-
-                        const reply = json.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (reply) {
-                            resolve(reply);
-                        } else {
-                            resolve(tryModelRequest(modelIndex + 1));
-                        }
-                    } catch (e) {
-                        resolve(tryModelRequest(modelIndex + 1));
+    return new Promise((resolve) => {
+        const req = https.request(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload)
+            }
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    
+                    if (res.statusCode !== 200) {
+                        console.error(`[API FEHLER] Gemini API Status: ${res.statusCode}. Details:`, data);
+                        let errorReason = json.error?.message || "Unbekannter Fehler";
+                        resolve(`🤖 [VGPL KI v6.0] Denkpause, weil Google Folgendes meldet: ${errorReason} (Code ${res.statusCode})`);
+                        return;
                     }
-                });
-            });
 
-            req.on('error', (err) => {
-                resolve(tryModelRequest(modelIndex + 1));
+                    const reply = json.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (reply) {
+                        resolve(reply);
+                    } else {
+                        resolve("🤖 [VGPL KI v6.0] Fehler: Google hat keine Text-Antwort generiert.");
+                    }
+                } catch (e) {
+                    resolve(`🤖 [VGPL KI v6.0] Fehler beim Lesen der Google-Antwort: ${e.message}`);
+                }
             });
-
-            req.write(payload);
-            req.end();
         });
-    };
 
-    // Starte den ersten Versuch mit dem ersten Modell (gemini-2.5-flash)
-    return await tryModelRequest(0);
+        req.on('error', (err) => {
+            resolve(`🤖 [VGPL KI v6.0] Verbindung zu Google fehlgeschlagen: ${err.message}`);
+        });
+
+        req.write(payload);
+        req.end();
+    });
 }
 
 // Event: Bot ist bereit und richtet das Support-Panel ein
