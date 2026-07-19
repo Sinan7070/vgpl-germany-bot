@@ -13,13 +13,13 @@ const {
     TextInputStyle
 } = require('discord.js');
 const https = require('https');
-const express = require('express'); // Express hinzufügen, um Render-Port-Timeout zu verhindern
+const express = require('express');
 
 console.log("==================================================");
 console.log("VGPL Germany Support-Bot mit Gemini-Regelwerk-KI wird gestartet...");
 console.log("==================================================");
 
-// 1. WEBSERVER EINRICHTEN (Verhindert den Render-Port-Timeout-Fehler!)
+// 1. WEBSERVER EINRICHTEN (Verhindert Render-Port-Timeout)
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -42,13 +42,25 @@ const client = new Client({
 
 // EXAKTE KANAL- UND KATEGORIE-KONFIGURATION
 const CONFIG = {
-    TOKEN: process.env.DISCORD_TOKEN, // Wird aus den Render-Umgebungsvariablen geladen
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "", // Der Gemini API Key aus Render
+    TOKEN: process.env.DISCORD_TOKEN,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
     PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für Support-Panel (#hilfe)
     CATEGORY_ID: '1527708420788977674', // Kategorie für Support-Tickets
-    ADMIN_ROLE_NAME: 'Admin', // Genauer Name der Admin-Rolle
-    HEAD_ADMIN_ROLE_NAME: 'Head Admin' // Genauer Name der Head-Admin-Rolle
+    ADMIN_ROLE_NAME: 'Admin',
+    HEAD_ADMIN_ROLE_NAME: 'Head Admin'
 };
+
+// Diagnose beim Starten: Zeigt an, ob ein gültiger AI-Studio-Schlüssel geladen wurde
+if (CONFIG.GEMINI_API_KEY) {
+    const keyStart = CONFIG.GEMINI_API_KEY.substring(0, 6);
+    const keyEnd = CONFIG.GEMINI_API_KEY.substring(CONFIG.GEMINI_API_KEY.length - 4);
+    console.log(`[DIAGNOSE] Geladener API-Schlüssel (gekürzt): ${keyStart}...${keyEnd}`);
+    if (!keyStart.startsWith("AIzaSy")) {
+        console.warn("[WARNUNG] Dein API-Schlüssel beginnt NICHT mit 'AIzaSy'. Ein korrekter Google AI Studio Schlüssel muss immer mit 'AIzaSy' beginnen! Bitte überprüfe deine Umgebungsvariablen in Render.");
+    }
+} else {
+    console.error("[FEHLER] Kein GEMINI_API_KEY in Render eingetragen!");
+}
 
 // Das exklusive Wissen der VGPL Germany basierend auf dem Regelwerk
 const VGPL_KNOWLEDGE = `
@@ -129,14 +141,11 @@ DEINE VERHALTENSREGELN ALS KI:
 async function askGemini(userQuery, retries = 5, delay = 1000) {
     const apiKey = CONFIG.GEMINI_API_KEY;
     if (!apiKey) {
-        console.error("Gemini Fehler: Kein GEMINI_API_KEY in Render-Umgebungsvariablen gefunden!");
-        return "Support-Hinweis: Die KI ist aktuell im Standby-Modus. Bitte warte einen Moment, ein Admin wird gleich für dich da sein!";
+        return "Support-Hinweis: Es wurde kein API-Schlüssel in Render eingetragen. Bitte trage den GEMINI_API_KEY ein!";
     }
 
-    // Wir nutzen das stabile v1 Beta-Modell für volle SystemInstruction-Kompatibilität
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
-    // Die korrekte Struktur für das Google-System-Prompt
     const payload = JSON.stringify({
         contents: [{ parts: [{ text: userQuery }] }],
         systemInstruction: { parts: [{ text: VGPL_KNOWLEDGE }] }
@@ -159,7 +168,13 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                         
                         if (res.statusCode !== 200) {
                             console.error(`[API FEHLER] Gemini API Status: ${res.statusCode}. Details:`, data);
-                            handleError(new Error(`API Error Status ${res.statusCode}`));
+                            
+                            // EXTREM WICHTIG FÜR DIAGNOSE: Schreibt den Fehler direkt verständlich in Discord!
+                            let errorReason = "Unbekannter Fehler";
+                            if (json.error && json.error.message) {
+                                errorReason = json.error.message;
+                            }
+                            resolve(`Ich habe gerade eine kleine Denkpause. (Technischer Fehler von Google: ${res.statusCode} - ${errorReason})`);
                             return;
                         }
 
@@ -168,11 +183,11 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                             resolve(reply);
                         } else {
                             console.error("[FORMAT FEHLER] Ungültige JSON-Antwortstruktur von Google:", data);
-                            handleError(new Error("Ungültiges Antwort-Format"));
+                            resolve("Ich habe gerade eine kleine Denkpause. (Technischer Fehler: Ungültiges Antwort-Format von Google)");
                         }
                     } catch (e) {
                         console.error("[PARSER FEHLER] Fehler beim Parsen der Antwort:", e);
-                        handleError(e);
+                        resolve(`Ich habe gerade eine kleine Denkpause. (Technischer Fehler beim Lesen der Antwort: ${e.message})`);
                     }
                 });
             });
@@ -184,7 +199,7 @@ async function askGemini(userQuery, retries = 5, delay = 1000) {
                     setTimeout(() => makeRequest(currentRetry - 1), backoffTime);
                 } else {
                     console.error("Gemini-API vollständig fehlgeschlagen nach allen Versuchen:", err);
-                    resolve("Ich habe gerade eine kleine Denkpause. Ein Admin wurde benachrichtigt und hilft dir gleich persönlich weiter!");
+                    resolve(`Ich habe gerade eine kleine Denkpause. (Verbindungsfehler zur Google-API: ${err.message})`);
                 }
             };
 
