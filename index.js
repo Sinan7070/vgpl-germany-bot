@@ -16,10 +16,10 @@ const https = require('https');
 const http = require('http'); // Nutzen des nativen HTTP-Moduls für Render-Kompatibilität
 
 console.log("==================================================");
-console.log("!!! VGPL SUPPORT-BOT (VERSION 9.1) STARTET !!!");
+console.log("!!! VGPL SUPPORT-BOT (VERSION 9.2) STARTET !!!");
 console.log("==================================================");
 
-// 1. NATIVEN WEBSERVER STARTEN (Verhindert Render-Port-Timeout ohne extra npm-Pakete)
+// 1. NATIVEN WEBSERVER STARTEN (Verhindert Render-Port-Timeout)
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('VGPL Germany Support-Bot läuft fehlerfrei und ist online!');
@@ -125,11 +125,12 @@ DEINE VERHALTENSREGELN ALS KI:
 - Erwähne niemals, auf welcher technischen Grundlage (wie ChatGPT, OpenAI oder Large Language Models) du basierst. Du bist einfach die "VGPL Support-KI".
 `;
 
-// Hilfsfunktion zur Kommunikation mit der API (Verbindet sich im Hintergrund unbemerkt mit GPT-4o-mini)
+// Hilfsfunktion zur Kommunikation mit der API (Vollständig kompatible URL-Zerlegung für Node.js)
 async function askBotBrain(userQuery) {
     const apiKey = CONFIG.OPENAI_API_KEY;
     if (!apiKey) {
-        return "🤖 [VGPL KI-Support] Fehler: Die Schnittstelle ist derzeit nicht konfiguriert!";
+        console.error("[FEHLER] Kein OPENAI_API_KEY konfiguriert.");
+        return "🤖 [VGPL KI-Support] Fehler: Die KI-Schnittstelle ist derzeit nicht konfiguriert!";
     }
 
     const payload = JSON.stringify({
@@ -141,15 +142,19 @@ async function askBotBrain(userQuery) {
         temperature: 0.5
     });
 
+    const options = {
+        hostname: 'api.openai.com',
+        path: '/v1/chat/completions',
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey.trim()}`,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload)
+        }
+    };
+
     return new Promise((resolve) => {
-        const req = https.request('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey.trim()}`,
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(payload)
-            }
-        }, (res) => {
+        const req = https.request(options, (res) => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', () => {
@@ -157,7 +162,7 @@ async function askBotBrain(userQuery) {
                     const json = JSON.parse(data);
                     
                     if (res.statusCode !== 200) {
-                        console.error(`[API FEHLER] Status: ${res.statusCode}. Details:`, data);
+                        console.error(`[API FEHLER] OpenAI meldet Status ${res.statusCode}:`, data);
                         resolve(`🤖 [VGPL KI-Support] Bitte entschuldige, ich habe gerade eine kurze Denkpause. Bitte kontaktiere einen Administrator.`);
                         return;
                     }
@@ -169,12 +174,14 @@ async function askBotBrain(userQuery) {
                         resolve("🤖 [VGPL KI-Support] Fehler: Konnte keine Antwort generieren.");
                     }
                 } catch (e) {
+                    console.error("[PARSE FEHLER] Fehler beim Lesen der Antwort:", e);
                     resolve(`🤖 [VGPL KI-Support] Systemfehler bei der Verarbeitung.`);
                 }
             });
         });
 
         req.on('error', (err) => {
+            console.error("[VERBINDUNGS FEHLER] OpenAI Verbindung fehlgeschlagen:", err);
             resolve(`🤖 [VGPL KI-Support] Systemverbindung fehlgeschlagen.`);
         });
 
@@ -454,7 +461,7 @@ client.on('interactionCreate', async (interaction) => {
                 .setColor('#0099FF')
                 .setTimestamp();
 
-            // Erste intelligente Antwort von der KI holen
+            // Erste intelligente Antwort holen
             const aiRawReply = await askBotBrain(contextForAI);
             const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
 
@@ -520,10 +527,11 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 4. LIVE CHAT-KONTROLLE MIT DER KI
+// 4. LIVE CHAT-KONTROLLE MIT DER KI (Robustere Kanalprüfung)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
+    // Erkennt alle echten Ticket-Kanal-Präfixe inklusive der Standard 'ticket-' Kanäle
     const isTicketChannel = message.channel.name && (
         message.channel.name.startsWith('transfer-') ||
         message.channel.name.startsWith('ergebnis-') ||
@@ -531,12 +539,15 @@ client.on('messageCreate', async (message) => {
         message.channel.name.startsWith('website-') ||
         message.channel.name.startsWith('profil-') ||
         message.channel.name.startsWith('disconnect-') ||
-        message.channel.name.startsWith('sonstiges-')
+        message.channel.name.startsWith('sonstiges-') ||
+        message.channel.name.startsWith('ticket-')
     );
 
+    // Reagiert, wenn die Nachricht in der Ticket-Kategorie ODER in einem passenden Ticket-Kanal liegt
     if (message.channel.parentId === CONFIG.CATEGORY_ID || isTicketChannel) {
         try {
             await message.channel.sendTyping();
+            console.log(`[TICKET CHAT] Verarbeite Nachricht von ${message.author.username} im Kanal ${message.channel.name}`);
 
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
