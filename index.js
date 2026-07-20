@@ -16,7 +16,7 @@ const https = require('https');
 const http = require('http'); // Nutzen des nativen HTTP-Moduls für Render-Kompatibilität
 
 console.log("==================================================");
-console.log("!!! VGPL SUPPORT-BOT (VERSION 9.2) STARTET !!!");
+console.log("!!! VGPL SUPPORT-BOT (VERSION 9.6) STARTET !!!");
 console.log("==================================================");
 
 // 1. NATIVEN WEBSERVER STARTEN (Verhindert Render-Port-Timeout)
@@ -42,7 +42,7 @@ const client = new Client({
 // EXAKTE KANAL- UND KATEGORIE-KONFIGURATION
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "", // Euer OpenAI Schlüssel (sk-...)
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "", // Euer soeben aufgeladener ChatGPT-Schlüssel (sk-...)
     PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für Support-Panel (#hilfe)
     CATEGORY_ID: '1527708420788977674', // Kategorie für Support-Tickets
     ADMIN_ROLE_NAME: 'Admin',
@@ -122,15 +122,14 @@ DEINE VERHALTENSREGELN ALS KI:
 - Beantworte Regelfragen basierend auf den obigen Paragraphen (z. B. Größenlimits, Disconnects, Streamregeln) präzise und nenne den Paragraphen, falls zutreffend.
 - WICHTIG: Wenn der User eine Frage stellt, die du nicht weißt, wenn er einen Protest einreichen will, wenn er Ergebnisse werten lassen möchte, oder wenn er explizit nach einem "Admin", "Mensch", "Supporter" oder "Manager" verlangt, antworte höflich, dass du sofort das Admin-Team hinzuziehst. Füge am Ende deiner Antwort exakt das Wort "[ADMIN_PING_REQUIRED]" (ohne Anführungszeichen) hinzu, damit der Bot die Administratoren anpingt!
 - Gib bei Fehlern auf der Website immer erst klassische KI-Tipps (Cache & Cookies löschen, Inkognito-Modus, Browser wechseln), bevor du Admins einschaltest.
-- Erwähne niemals, auf welcher technischen Grundlage (wie ChatGPT, OpenAI oder Large Language Models) du basierst. Du bist einfach die "VGPL Support-KI".
+- Erwähne niemals, auf welcher technischen Grundlage (wie ChatGPT, OpenAI oder Gemini) du basierst. Du bist einfach die "VGPL Support-KI".
 `;
 
-// Hilfsfunktion zur Kommunikation mit der API (Vollständig kompatible URL-Zerlegung für Node.js)
+// Hilfsfunktion zur Kommunikation mit der OpenAI API
 async function askBotBrain(userQuery) {
     const apiKey = CONFIG.OPENAI_API_KEY;
     if (!apiKey) {
-        console.error("[FEHLER] Kein OPENAI_API_KEY konfiguriert.");
-        return "🤖 [VGPL KI-Support] Fehler: Die KI-Schnittstelle ist derzeit nicht konfiguriert!";
+        return "🤖 [VGPL KI-Support] Fehler: Die KI-Schnittstelle ist derzeit nicht konfiguriert! `OPENAI_API_KEY` fehlt in Render.";
     }
 
     const payload = JSON.stringify({
@@ -162,7 +161,7 @@ async function askBotBrain(userQuery) {
                     const json = JSON.parse(data);
                     
                     if (res.statusCode !== 200) {
-                        console.error(`[API FEHLER] OpenAI meldet Status ${res.statusCode}:`, data);
+                        console.error(`[API FEHLER] ChatGPT Status: ${res.statusCode}. Details:`, data);
                         resolve(`🤖 [VGPL KI-Support] Bitte entschuldige, ich habe gerade eine kurze Denkpause. Bitte kontaktiere einen Administrator.`);
                         return;
                     }
@@ -174,14 +173,12 @@ async function askBotBrain(userQuery) {
                         resolve("🤖 [VGPL KI-Support] Fehler: Konnte keine Antwort generieren.");
                     }
                 } catch (e) {
-                    console.error("[PARSE FEHLER] Fehler beim Lesen der Antwort:", e);
                     resolve(`🤖 [VGPL KI-Support] Systemfehler bei der Verarbeitung.`);
                 }
             });
         });
 
         req.on('error', (err) => {
-            console.error("[VERBINDUNGS FEHLER] OpenAI Verbindung fehlgeschlagen:", err);
             resolve(`🤖 [VGPL KI-Support] Systemverbindung fehlgeschlagen.`);
         });
 
@@ -197,8 +194,8 @@ client.once('ready', async () => {
     try {
         const supportChannel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
         if (supportChannel) {
-            // Wir löschen eventuelle alte Panel-Nachrichten im Hilfekanal, um das Panel frisch und mit allen Kategorien zu senden
-            const messages = await supportChannel.messages.fetch({ limit: 20 });
+            // Wir löschen alte Panel-Nachrichten im Hilfekanal
+            const messages = await supportChannel.messages.fetch({ limit: 15 });
             for (const msg of messages.values()) {
                 if (msg.author.id === client.user.id) {
                     await msg.delete().catch(() => {});
@@ -207,7 +204,7 @@ client.once('ready', async () => {
 
             const embed = new EmbedBuilder()
                 .setTitle('📩 VGPL Germany Support-Center')
-                .setDescription('Benötigst du Hilfe, hast du Fragen oder möchtest du ein Problem melden?\n\nWähle unten im Menü die passende Kategorie aus, um ein Ticket zu öffnen. Unser intelligenter Support-Bot hilft dir sofort!')
+                .setDescription('Benötigst du Hilfe, hast du Fragen oder möchtest du ein Problem melden?\n\nWähle unten im Menü die passende Kategorie aus, um ein Ticket zu öffnen. Unser Support-Bot hilft dir sofort!')
                 .setColor('#0099FF')
                 .setFooter({ text: 'VGPL Germany Support' });
 
@@ -226,7 +223,7 @@ client.once('ready', async () => {
 
             const row = new ActionRowBuilder().addComponents(selectMenu);
             await supportChannel.send({ embeds: [embed], components: [row] });
-            console.log('Neues Support-Panel mit allen Kategorien erfolgreich gesendet!');
+            console.log('Support-Panel erfolgreich gesendet!');
         }
     } catch (err) {
         console.error('Fehler beim Einrichten des Support-Panels:', err);
@@ -527,11 +524,10 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 4. LIVE CHAT-KONTROLLE MIT DER KI (Robustere Kanalprüfung)
+// 4. LIVE CHAT-KONTROLLE MIT DER KI (Mit Admin-Ignorieren-Sperre)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Erkennt alle echten Ticket-Kanal-Präfixe inklusive der Standard 'ticket-' Kanäle
     const isTicketChannel = message.channel.name && (
         message.channel.name.startsWith('transfer-') ||
         message.channel.name.startsWith('ergebnis-') ||
@@ -543,11 +539,21 @@ client.on('messageCreate', async (message) => {
         message.channel.name.startsWith('ticket-')
     );
 
-    // Reagiert, wenn die Nachricht in der Ticket-Kategorie ODER in einem passenden Ticket-Kanal liegt
     if (message.channel.parentId === CONFIG.CATEGORY_ID || isTicketChannel) {
+        
+        // 🚨 SPERRE: Prüfen, ob der Schreiber ein Admin oder Head Admin ist
+        const isUserAdmin = message.member?.roles.cache.some(role => 
+            role.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase() || 
+            role.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase()
+        );
+
+        if (isUserAdmin) {
+            console.log(`[INFO] Admin ${message.author.username} schreibt. Bot ignoriert diese Nachricht.`);
+            return; // Beende die Funktion sofort -> KI antwortet nicht auf Admins!
+        }
+
         try {
             await message.channel.sendTyping();
-            console.log(`[TICKET CHAT] Verarbeite Nachricht von ${message.author.username} im Kanal ${message.channel.name}`);
 
             const rawMessages = await message.channel.messages.fetch({ limit: 12 });
             const contextLines = [];
