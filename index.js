@@ -37,13 +37,13 @@ const client = new Client({
     ]
 });
 
-// KONFIGURATION (HILFE / SUPPORT)
+// KONFIGURATION
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
     
-    PANEL_CHANNEL_ID: '1527708821320106164', // Text-Kanal Support Panel (#hilfe)
-    CATEGORY_ID: '1527708420788977674',      // KATEGORIE für Support-Tickets
+    PANEL_CHANNEL_ID: '1527708821320106164', // Support Kanal ID (#hilfe)
+    CATEGORY_ID: '1527708420788977674',      // KATEGORIE ID für neue Tickets
     
     ADMIN_ROLE_NAME: 'Admin',
     HEAD_ADMIN_ROLE_NAME: 'Head Admin'
