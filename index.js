@@ -37,7 +37,7 @@ const client = new Client({
     ]
 });
 
-// KONFIGURATION (NUR HILFE / SUPPORT)
+// KONFIGURATION (HILFE / SUPPORT)
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
@@ -53,12 +53,22 @@ const CONFIG = {
 const VGPL_KNOWLEDGE = `
 Du bist der offizielle KI-Support-Assistent der VGPL Germany.
 Deine Aufgabe ist es, Usern in Support-Tickets schnell, freundlich und präzise bei Fragen zum Regelwerk, Spielbetrieb und Technik zu helfen.
+
+ALLGEMEINE REGELN & ABLAUF:
+- Spiel: EA SPORTS FC Pro Clubs (Crossplay)
+- Kadergröße: Mindestens 7 aktive Spieler pro Team.
+- Mindestspielerzahl pro Match: 7 Spieler (weniger führt zu Wertung).
+- Wartezeit bei Matches: Max. 10 Minuten nach Anstoßzeit.
+- Verbindungsabbruch: Abbruch in den ersten 10 Min. ohne Tor -> Spielwiederholung.
+- Größenlimits: IV max 1,87 m / Feldspieler max 1,82 m.
+- Streampflicht: Jedes Spiel muss von mindestens einem Spieler gestreamt werden.
+- Proteste: Müssen innerhalb von 24 Stunden mit Video-Beweis eingereicht werden.
 `;
 
 // ChatGPT API Aufruf
 async function askBotBrain(userQuery) {
     const apiKey = CONFIG.OPENAI_API_KEY;
-    if (!apiKey) return "🤖 [KI-Support] Fehler: API-Schlüssel fehlt!";
+    if (!apiKey) return "🤖 [KI-Support] Hinweis: KI-Schlüssel nicht konfiguriert.";
 
     const payload = JSON.stringify({
         model: "gpt-4o-mini",
@@ -88,17 +98,17 @@ async function askBotBrain(userQuery) {
                 try {
                     const json = JSON.parse(data);
                     if (res.statusCode !== 200) {
-                        resolve(`🤖 [KI-Support] Kurze Denkpause... bitte später versuchen.`);
+                        resolve(`🤖 [KI-Support] Bitte erstelle eine Nachricht im Ticket, ein Teammitglied hilft dir bald.`);
                         return;
                     }
                     const reply = json.choices?.[0]?.message?.content;
                     resolve(reply || "🤖 [KI-Support] Keine Antwort erhalten.");
                 } catch (e) {
-                    resolve(`🤖 [KI-Support] Systemfehler bei Verarbeitung.`);
+                    resolve(`🤖 [KI-Support] Systemverarbeitung läuft.`);
                 }
             });
         });
-        req.on('error', () => resolve(`🤖 [KI-Support] Systemverbindung fehlgeschlagen.`));
+        req.on('error', () => resolve(`🤖 [KI-Support] Verbindung wird neu aufgebaut.`));
         req.write(payload);
         req.end();
     });
@@ -130,7 +140,7 @@ async function setupHelpPanel(statusLogger = console.log) {
             ]);
 
         await ch.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
-        await statusLogger(`✅ Hilfe-Panel gesendet in Kanal: #${ch.name}`);
+        await statusLogger(`✅ Hilfe-Panel erfolgreich in #${ch.name} gesendet!`);
     } catch (e) {
         await statusLogger(`❌ Fehler beim Senden des Hilfe-Panels: ${e.message}`);
     }
