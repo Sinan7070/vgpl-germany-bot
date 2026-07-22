@@ -16,7 +16,7 @@ const https = require('https');
 const http = require('http');
 
 console.log("==================================================");
-console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.4) STARTET !!!");
+console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.5) STARTET !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER FÜR RENDER KEEP-ALIVE
@@ -139,21 +139,19 @@ async function askBotBrain(userQuery) {
     });
 }
 
-// FEHLERFREIES SENDEN ALLER 3 PANELS
-async function setupAllPanels() {
-    console.log("Starte die Konfiguration aller 3 Panels...");
+// DIREKTES UND KUGELSICHERES SENDEN ALLER 3 PANELS
+async function setupAllPanels(statusLogger = null) {
+    const log = (msg) => {
+        console.log(msg);
+        if (statusLogger) statusLogger(msg);
+    };
+
+    log("🔄 Starte das Erstellen aller 3 Panels...");
 
     // 1. SUPPORT-PANEL (#hilfe)
     try {
         const supportChannel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
-        if (supportChannel && supportChannel.isTextBased()) {
-            const fetched = await supportChannel.messages.fetch({ limit: 10 }).catch(() => null);
-            if (fetched) {
-                for (const msg of fetched.values()) {
-                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
-                }
-            }
-
+        if (supportChannel && typeof supportChannel.send === 'function') {
             const embed = new EmbedBuilder()
                 .setTitle('📩 VGPL Germany Support-Center')
                 .setDescription('Wähle unten im Menü die passende Kategorie aus, um ein Ticket zu öffnen. Unser Support-Bot hilft dir sofort!')
@@ -174,25 +172,18 @@ async function setupAllPanels() {
                 ]);
 
             await supportChannel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
-            console.log('✅ Support-Panel in #hilfe eingerichtet.');
+            log('✅ 1. Support-Panel (#hilfe) erfolgreich gesendet.');
         } else {
-            console.error('❌ Support-Kanal ID ungültig oder kein Textkanal:', CONFIG.PANEL_CHANNEL_ID);
+            log(`❌ 1. Support-Kanal ID (${CONFIG.PANEL_CHANNEL_ID}) nicht erreichbar!`);
         }
     } catch (e) {
-        console.error('Fehler beim Support-Panel:', e);
+        log(`❌ Fehler beim Support-Panel: ${e.message}`);
     }
 
     // 2. TEAM-REGISTRIERUNG PANEL
     try {
         const regChannel = await client.channels.fetch(CONFIG.TEAM_REG_CHANNEL_ID).catch(() => null);
-        if (regChannel && regChannel.isTextBased()) {
-            const fetched = await regChannel.messages.fetch({ limit: 10 }).catch(() => null);
-            if (fetched) {
-                for (const msg of fetched.values()) {
-                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
-                }
-            }
-
+        if (regChannel && typeof regChannel.send === 'function') {
             const regEmbed = new EmbedBuilder()
                 .setTitle('🏆 Team registrieren')
                 .setDescription('Möchtest du dein Team für die neue Saison der VGPL Germany anmelden?\n\nKlicke auf den Button unten, um das Formular auszufüllen und deine Teambewerbung zu starten!')
@@ -206,25 +197,18 @@ async function setupAllPanels() {
                 .setStyle(ButtonStyle.Primary);
 
             await regChannel.send({ embeds: [regEmbed], components: [new ActionRowBuilder().addComponents(regButton)] });
-            console.log('✅ Team-Registrierungs-Panel eingerichtet.');
+            log('✅ 2. Team-Registrierungs-Panel erfolgreich gesendet.');
         } else {
-            console.error('❌ Team-Reg-Kanal ID ungültig oder kein Textkanal:', CONFIG.TEAM_REG_CHANNEL_ID);
+            log(`❌ 2. Team-Reg-Kanal ID (${CONFIG.TEAM_REG_CHANNEL_ID}) nicht erreichbar!`);
         }
     } catch (e) {
-        console.error('Fehler beim Team-Registrierungs-Panel:', e);
+        log(`❌ Fehler beim Team-Registrierungs-Panel: ${e.message}`);
     }
 
     // 3. KOOPERATION DROPDOWN PANEL
     try {
         const koopChannel = await client.channels.fetch(CONFIG.KOOP_REG_CHANNEL_ID).catch(() => null);
-        if (koopChannel && koopChannel.isTextBased()) {
-            const fetched = await koopChannel.messages.fetch({ limit: 10 }).catch(() => null);
-            if (fetched) {
-                for (const msg of fetched.values()) {
-                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
-                }
-            }
-
+        if (koopChannel && typeof koopChannel.send === 'function') {
             const koopEmbed = new EmbedBuilder()
                 .setTitle('🤝 Kooperation anfragen')
                 .setDescription('Möchtest du eine Partnerschaft, ein Sponsoring oder eine Event-Kooperation mit der VGPL Germany eingehen?\n\nWähle unten im Menü die passende Art der Kooperation aus, um das Formular auszufüllen!')
@@ -244,19 +228,21 @@ async function setupAllPanels() {
                 ]);
 
             await koopChannel.send({ embeds: [koopEmbed], components: [new ActionRowBuilder().addComponents(koopSelectMenu)] });
-            console.log('✅ Kooperations-Panel (Dropdown) eingerichtet.');
+            log('✅ 3. Kooperations-Panel (Dropdown) erfolgreich gesendet.');
         } else {
-            console.error('❌ Koop-Kanal ID ungültig oder kein Textkanal:', CONFIG.KOOP_REG_CHANNEL_ID);
+            log(`❌ 3. Koop-Kanal ID (${CONFIG.KOOP_REG_CHANNEL_ID}) nicht erreichbar!`);
         }
     } catch (e) {
-        console.error('Fehler beim Kooperations-Panel:', e);
+        log(`❌ Fehler beim Kooperations-Panel: ${e.message}`);
     }
 }
 
 // BOT BEREIT: Panels beim Start einrichten
 client.once('ready', async () => {
     console.log(`Erfolgreich eingeloggt als ${client.user.tag}!`);
-    await setupAllPanels();
+    setTimeout(async () => {
+        await setupAllPanels();
+    }, 3000); // 3 Sekunden Verzögerung für vollen Cache-Aufbau
 });
 
 // INTERAKTIONEN (Menüauswahl, Buttons, Modals)
@@ -562,7 +548,7 @@ client.on('interactionCreate', async (interaction) => {
             await ticketChannel.send({ embeds: [okEmbed] });
 
             const adminChannel = await guild.channels.fetch(CONFIG.ADMIN_REG_CHANNEL_ID).catch(() => null);
-            if (adminChannel) {
+            if (adminChannel && typeof adminChannel.send === 'function') {
                 const adminEmbed = new EmbedBuilder()
                     .setTitle('📥 NEUE TEAM-ANMELDUNG EINGEGANGEN')
                     .setDescription(`**Erstellt von:** ${member} (${member.user.tag})\n**Ticket-Kanal:** ${ticketChannel}`)
@@ -644,7 +630,7 @@ client.on('interactionCreate', async (interaction) => {
             await ticketChannel.send({ embeds: [okEmbed] });
 
             const adminChannel = await guild.channels.fetch(CONFIG.KOOP_ADMIN_CHANNEL_ID).catch(() => null);
-            if (adminChannel) {
+            if (adminChannel && typeof adminChannel.send === 'function') {
                 const adminEmbed = new EmbedBuilder()
                     .setTitle('📥 NEUE KOOPERATION EINGEGANGEN')
                     .setDescription(`**Erstellt von:** ${member} (${member.user.tag})\n**Ticket-Kanal:** ${ticketChannel}`)
@@ -728,17 +714,17 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // ADMIN-MANUELLER BEFEHL FÜR PANELS
-    if (message.content === '!setup') {
-        const isUserAdmin = message.member?.roles.cache.some(role => 
-            role.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase() || 
-            role.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase()
-        );
-        if (isUserAdmin) {
-            await message.reply('🔄 Erzwinge das Erstellen aller 3 Panels...');
-            await setupAllPanels();
-            return message.reply('✅ Alle 3 Panels wurden erfolgreich gesendet!');
-        }
+    // ADMIN-MANUELLER BEFEHL FÜR PANELS MIT STATUSMELDUNG
+    if (message.content.trim() === '!setup') {
+        let logBuffer = [];
+        const statusMsg = await message.reply('🔄 Starte Panel-Einrichtung...');
+        
+        await setupAllPanels(async (msg) => {
+            logBuffer.push(msg);
+            await statusMsg.edit(`🔄 **Setup-Fortschritt:**\n${logBuffer.join('\n')}`).catch(() => {});
+        });
+        
+        return;
     }
 
     const channelName = message.channel.name ? message.channel.name.toLowerCase() : '';
