@@ -16,7 +16,7 @@ const https = require('https');
 const http = require('http'); // Nutzen des nativen HTTP-Moduls für Render-Kompatibilität
 
 console.log("==================================================");
-console.log("!!! VGPL SUPPORT-BOT (VERSION 9.6) STARTET !!!");
+console.log("!!! VGPL SUPPORT-BOT (VERSION 9.7) STARTET !!!");
 console.log("==================================================");
 
 // 1. NATIVEN WEBSERVER STARTEN (Verhindert Render-Port-Timeout)
@@ -42,7 +42,7 @@ const client = new Client({
 // EXAKTE KANAL- UND KATEGORIE-KONFIGURATION
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "", // Euer soeben aufgeladener ChatGPT-Schlüssel (sk-...)
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "", // Euer aufgeladener ChatGPT-Schlüssel (sk-...)
     PANEL_CHANNEL_ID: '1527708821320106164', // Kanal für Support-Panel (#hilfe)
     CATEGORY_ID: '1527708420788977674', // Kategorie für Support-Tickets
     ADMIN_ROLE_NAME: 'Admin',
@@ -129,7 +129,7 @@ DEINE VERHALTENSREGELN ALS KI:
 async function askBotBrain(userQuery) {
     const apiKey = CONFIG.OPENAI_API_KEY;
     if (!apiKey) {
-        return "🤖 [VGPL KI-Support] Fehler: Die KI-Schnittstelle ist derzeit nicht konfiguriert! `OPENAI_API_KEY` fehlt in Render.";
+        return "🤖 [VGPL KI-Support] Fehler: Die KI-Schnittstelle ist derzeit nicht konfiguriert!";
     }
 
     const payload = JSON.stringify({
@@ -524,73 +524,76 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 4. LIVE CHAT-KONTROLLE MIT DER KI (Mit Admin-Ignorieren-Sperre)
+// 4. LIVE CHAT-KONTROLLE MIT DER KI (STRIKT NUR FÜR TICKETS!)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    const isTicketChannel = message.channel.name && (
-        message.channel.name.startsWith('transfer-') ||
-        message.channel.name.startsWith('ergebnis-') ||
-        message.channel.name.startsWith('verstoss-') ||
-        message.channel.name.startsWith('website-') ||
-        message.channel.name.startsWith('profil-') ||
-        message.channel.name.startsWith('disconnect-') ||
-        message.channel.name.startsWith('sonstiges-') ||
-        message.channel.name.startsWith('ticket-')
+    // STRIKTE PRÜFUNG: Reagiert NUR, wenn der Channelname EINDEUTIG ein Ticket ist!
+    const channelName = message.channel.name ? message.channel.name.toLowerCase() : '';
+    const isStrictTicketChannel = 
+        channelName.startsWith('transfer-') ||
+        channelName.startsWith('ergebnis-') ||
+        channelName.startsWith('verstoss-') ||
+        channelName.startsWith('website-') ||
+        channelName.startsWith('profil-') ||
+        channelName.startsWith('disconnect-') ||
+        channelName.startsWith('sonstiges-') ||
+        channelName.startsWith('ticket-');
+
+    // Wenn es KEIN Ticket-Kanal ist, breche SOFORT ab -> Schützt normale Server-Chats wie #lounge!
+    if (!isStrictTicketChannel) {
+        return;
+    }
+
+    // SPERRE: Prüfen, ob der Schreiber ein Admin oder Head Admin ist
+    const isUserAdmin = message.member?.roles.cache.some(role => 
+        role.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase() || 
+        role.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase()
     );
 
-    if (message.channel.parentId === CONFIG.CATEGORY_ID || isTicketChannel) {
-        
-        // 🚨 SPERRE: Prüfen, ob der Schreiber ein Admin oder Head Admin ist
-        const isUserAdmin = message.member?.roles.cache.some(role => 
-            role.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase() || 
-            role.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase()
-        );
+    if (isUserAdmin) {
+        console.log(`[INFO] Admin ${message.author.username} schreibt im Ticket. Bot ignoriert diese Nachricht.`);
+        return; // KI antwortet nicht auf Admins im Ticket!
+    }
 
-        if (isUserAdmin) {
-            console.log(`[INFO] Admin ${message.author.username} schreibt. Bot ignoriert diese Nachricht.`);
-            return; // Beende die Funktion sofort -> KI antwortet nicht auf Admins!
-        }
+    try {
+        await message.channel.sendTyping();
 
-        try {
-            await message.channel.sendTyping();
+        const rawMessages = await message.channel.messages.fetch({ limit: 12 });
+        const contextLines = [];
 
-            const rawMessages = await message.channel.messages.fetch({ limit: 12 });
-            const contextLines = [];
+        const msgArray = Array.from(rawMessages.values()).reverse();
 
-            const msgArray = Array.from(rawMessages.values()).reverse();
+        msgArray.forEach(msg => {
+            const authorName = msg.author.bot ? "KI-Assistent" : msg.author.username;
+            contextLines.push(`${authorName}: ${msg.content}`);
+        });
 
-            msgArray.forEach(msg => {
-                const authorName = msg.author.bot ? "KI-Assistent" : msg.author.username;
-                contextLines.push(`${authorName}: ${msg.content}`);
+        const promptText = `Es gibt einen neuen Chatverlauf in einem VGPL-Support-Ticket. Antworte auf die letzte Nachricht von ${message.author.username}.\n\nBisheriger Verlauf:\n${contextLines.join('\n')}\n\nAntwort des KI-Assistenten:`;
+
+        // KI fragen
+        const aiRawReply = await askBotBrain(promptText);
+        const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
+
+        await message.reply({ content: aiCleanReply });
+
+        if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
+            const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
+            const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
+
+            let alertString = `🔔 **Admin-Support wurde hinzugerufen:** `;
+            const mentions = [];
+            if (adminRole) { alertString += `${adminRole} `; mentions.push(adminRole.id); }
+            if (headAdminRole) { alertString += `${headAdminRole} `; mentions.push(headAdminRole.id); }
+            alertString += `, bitte übernehmen!`;
+
+            await message.channel.send({
+                content: alertString,
+                allowedMentions: { roles: mentions }
             });
-
-            const promptText = `Es gibt einen neuen Chatverlauf in einem VGPL-Support-Ticket. Antworte auf die letzte Nachricht von ${message.author.username}.\n\nBisheriger Verlauf:\n${contextLines.join('\n')}\n\nAntwort des KI-Assistenten:`;
-
-            // KI fragen
-            const aiRawReply = await askBotBrain(promptText);
-            const aiCleanReply = aiRawReply.replace('[ADMIN_PING_REQUIRED]', '').trim();
-
-            await message.reply({ content: aiCleanReply });
-
-            if (aiRawReply.includes('[ADMIN_PING_REQUIRED]')) {
-                const adminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase());
-                const headAdminRole = message.guild.roles.cache.find(r => r.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase());
-
-                let alertString = `🔔 **Admin-Support wurde hinzugerufen:** `;
-                const mentions = [];
-                if (adminRole) { alertString += `${adminRole} `; mentions.push(adminRole.id); }
-                if (headAdminRole) { alertString += `${headAdminRole} `; mentions.push(headAdminRole.id); }
-                alertString += `, bitte übernehmen!`;
-
-                await message.channel.send({
-                    content: alertString,
-                    allowedMentions: { roles: mentions }
-                });
-            }
-        } catch (error) {
-            console.error("Fehler bei der Nachrichtenverarbeitung im Support-Ticket:", error);
         }
+    } catch (error) {
+        console.error("Fehler bei der Nachrichtenverarbeitung im Support-Ticket:", error);
     }
 });
 
