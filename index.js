@@ -16,7 +16,7 @@ const https = require('https');
 const http = require('http');
 
 console.log("==================================================");
-console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.0) STARTET !!!");
+console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.4) STARTET !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER FÜR RENDER KEEP-ALIVE
@@ -50,11 +50,11 @@ const CONFIG = {
     
     // TEAM-REGISTRIERUNG
     TEAM_REG_CHANNEL_ID: '1527710839396634816',  // Kanal für Button "Team registrieren"
-    TEAM_REG_CATEGORY_ID: '1527711258709594273', // Kategorie für erstelle Team-Tickets
+    TEAM_REG_CATEGORY_ID: '1527711258709594273', // Kategorie für erstellte Team-Tickets
     ADMIN_REG_CHANNEL_ID: '1527737699442753597', // Admin-Kanal für Teams mit den 3 Buttons
 
     // KOOPERATIONEN
-    KOOP_REG_CHANNEL_ID: '1527713678101844030',  // Kanal für Button "Kooperation anfragen"
+    KOOP_REG_CHANNEL_ID: '1527713678101844030',  // Kanal für Dropdown "Kooperation anfragen"
     KOOP_CATEGORY_ID: '1527714318752415844',     // Kategorie für erstellte Kooperations-Tickets
     KOOP_ADMIN_CHANNEL_ID: '1529505141223592047',// Admin-Kanal für Kooperationen mit den 3 Buttons
 
@@ -139,101 +139,124 @@ async function askBotBrain(userQuery) {
     });
 }
 
-// BOT BEREIT: Alle Panels einrichten
-client.once('ready', async () => {
-    console.log(`Erfolgreich eingeloggt als ${client.user.tag}!`);
+// FEHLERFREIES SENDEN ALLER 3 PANELS
+async function setupAllPanels() {
+    console.log("Starte die Konfiguration aller 3 Panels...");
 
-    // 1. SUPPORT-PANEL EINRICHTEN (#hilfe)
+    // 1. SUPPORT-PANEL (#hilfe)
     try {
         const supportChannel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
-        if (supportChannel) {
-            const messages = await supportChannel.messages.fetch({ limit: 10 });
-            const hasPanel = messages.some(msg => msg.embeds.length > 0 && msg.components.length > 0);
-
-            if (!hasPanel) {
-                const embed = new EmbedBuilder()
-                    .setTitle('📩 VGPL Germany Support-Center')
-                    .setDescription('Wähle unten im Menü die passende Kategorie aus, um ein Ticket zu öffnen. Unser Support-Bot hilft dir sofort!')
-                    .setColor('#0099FF')
-                    .setFooter({ text: 'VGPL Germany Support' });
-
-                const selectMenu = new StringSelectMenuBuilder()
-                    .setCustomId('select_support_category')
-                    .setPlaceholder('Support-Kategorie auswählen...')
-                    .addOptions([
-                        { label: '1. Transfer Problem', value: 'ticket_transfer', description: 'Probleme beim Transfer von Spielern', emoji: '🔄' },
-                        { label: '2. Ergebnis Problem', value: 'ticket_ergebnis', description: 'Fehlerhaft eingetragene Ergebnisse', emoji: '📊' },
-                        { label: '3. Regelverstoß melden', value: 'ticket_verstoss', description: 'Cheating, Beleidigungen etc. melden', emoji: '⚠️' },
-                        { label: '4. Website Problem', value: 'ticket_website', description: 'Fehler auf der Website melden', emoji: '🌐' },
-                        { label: '5. Account / Profil Problem', value: 'ticket_account', description: 'Falsche Daten im Spielerprofil', emoji: '👤' },
-                        { label: '6. Spielabbruch / Disconnect', value: 'ticket_disconnect', description: 'Verbindungsabbruch während des Matches', emoji: '🔌' },
-                        { label: '7. Sonstiges', value: 'ticket_sonstiges', description: 'Für alle anderen Anliegen', emoji: '📝' }
-                    ]);
-
-                const row = new ActionRowBuilder().addComponents(selectMenu);
-                await supportChannel.send({ embeds: [embed], components: [row] });
-                console.log('Support-Panel eingerichtet.');
+        if (supportChannel && supportChannel.isTextBased()) {
+            const fetched = await supportChannel.messages.fetch({ limit: 10 }).catch(() => null);
+            if (fetched) {
+                for (const msg of fetched.values()) {
+                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
+                }
             }
+
+            const embed = new EmbedBuilder()
+                .setTitle('📩 VGPL Germany Support-Center')
+                .setDescription('Wähle unten im Menü die passende Kategorie aus, um ein Ticket zu öffnen. Unser Support-Bot hilft dir sofort!')
+                .setColor('#0099FF')
+                .setFooter({ text: 'VGPL Germany Support' });
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('select_support_category')
+                .setPlaceholder('Support-Kategorie auswählen...')
+                .addOptions([
+                    { label: '1. Transfer Problem', value: 'ticket_transfer', description: 'Probleme beim Transfer von Spielern', emoji: '🔄' },
+                    { label: '2. Ergebnis Problem', value: 'ticket_ergebnis', description: 'Fehlerhaft eingetragene Ergebnisse', emoji: '📊' },
+                    { label: '3. Regelverstoß melden', value: 'ticket_verstoss', description: 'Cheating, Beleidigungen etc. melden', emoji: '⚠️' },
+                    { label: '4. Website Problem', value: 'ticket_website', description: 'Fehler auf der Website melden', emoji: '🌐' },
+                    { label: '5. Account / Profil Problem', value: 'ticket_account', description: 'Falsche Daten im Spielerprofil', emoji: '👤' },
+                    { label: '6. Spielabbruch / Disconnect', value: 'ticket_disconnect', description: 'Verbindungsabbruch während des Matches', emoji: '🔌' },
+                    { label: '7. Sonstiges', value: 'ticket_sonstiges', description: 'Für alle anderen Anliegen', emoji: '📝' }
+                ]);
+
+            await supportChannel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
+            console.log('✅ Support-Panel in #hilfe eingerichtet.');
+        } else {
+            console.error('❌ Support-Kanal ID ungültig oder kein Textkanal:', CONFIG.PANEL_CHANNEL_ID);
         }
     } catch (e) {
         console.error('Fehler beim Support-Panel:', e);
     }
 
-    // 2. TEAM-REGISTRIERUNG PANEL EINRICHTEN
+    // 2. TEAM-REGISTRIERUNG PANEL
     try {
         const regChannel = await client.channels.fetch(CONFIG.TEAM_REG_CHANNEL_ID).catch(() => null);
-        if (regChannel) {
-            const regMessages = await regChannel.messages.fetch({ limit: 10 });
-            const hasRegPanel = regMessages.some(msg => msg.embeds.length > 0 && msg.components.length > 0);
-
-            if (!hasRegPanel) {
-                const regEmbed = new EmbedBuilder()
-                    .setTitle('🏆 Team registrieren')
-                    .setDescription('Möchtest du dein Team für die neue Saison der VGPL Germany anmelden?\n\nKlicke auf den Button unten, um das Formular auszufüllen und deine Teambewerbung zu starten!')
-                    .setColor('#FFCC00')
-                    .setFooter({ text: 'VGPL Germany Registrierung' });
-
-                const regButton = new ButtonBuilder()
-                    .setCustomId('btn_open_team_reg')
-                    .setLabel('Team registrieren')
-                    .setEmoji('🏆')
-                    .setStyle(ButtonStyle.Primary);
-
-                await regChannel.send({ embeds: [regEmbed], components: [new ActionRowBuilder().addComponents(regButton)] });
-                console.log('Team-Registrierungs-Panel eingerichtet.');
+        if (regChannel && regChannel.isTextBased()) {
+            const fetched = await regChannel.messages.fetch({ limit: 10 }).catch(() => null);
+            if (fetched) {
+                for (const msg of fetched.values()) {
+                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
+                }
             }
+
+            const regEmbed = new EmbedBuilder()
+                .setTitle('🏆 Team registrieren')
+                .setDescription('Möchtest du dein Team für die neue Saison der VGPL Germany anmelden?\n\nKlicke auf den Button unten, um das Formular auszufüllen und deine Teambewerbung zu starten!')
+                .setColor('#FFCC00')
+                .setFooter({ text: 'VGPL Germany Registrierung' });
+
+            const regButton = new ButtonBuilder()
+                .setCustomId('btn_open_team_reg')
+                .setLabel('Team registrieren')
+                .setEmoji('🏆')
+                .setStyle(ButtonStyle.Primary);
+
+            await regChannel.send({ embeds: [regEmbed], components: [new ActionRowBuilder().addComponents(regButton)] });
+            console.log('✅ Team-Registrierungs-Panel eingerichtet.');
+        } else {
+            console.error('❌ Team-Reg-Kanal ID ungültig oder kein Textkanal:', CONFIG.TEAM_REG_CHANNEL_ID);
         }
     } catch (e) {
         console.error('Fehler beim Team-Registrierungs-Panel:', e);
     }
 
-    // 3. KOOPERATION PANEL EINRICHTEN (Kanal 1527713678101844030)
+    // 3. KOOPERATION DROPDOWN PANEL
     try {
         const koopChannel = await client.channels.fetch(CONFIG.KOOP_REG_CHANNEL_ID).catch(() => null);
-        if (koopChannel) {
-            const koopMessages = await koopChannel.messages.fetch({ limit: 10 });
-            const hasKoopPanel = koopMessages.some(msg => msg.embeds.length > 0 && msg.components.length > 0);
-
-            if (!hasKoopPanel) {
-                const koopEmbed = new EmbedBuilder()
-                    .setTitle('🤝 Kooperation anfragen')
-                    .setDescription('Möchtest du eine Partnerschaft, ein Sponsoring oder eine Event-Kooperation mit der VGPL Germany eingehen?\n\nKlicke auf den Button unten, um deine Anfrage direkt an die Ligation zu senden!')
-                    .setColor('#9B59B6')
-                    .setFooter({ text: 'VGPL Germany Kooperationen' });
-
-                const koopButton = new ButtonBuilder()
-                    .setCustomId('btn_open_koop_reg')
-                    .setLabel('Kooperation anfragen')
-                    .setEmoji('🤝')
-                    .setStyle(ButtonStyle.Success);
-
-                await koopChannel.send({ embeds: [koopEmbed], components: [new ActionRowBuilder().addComponents(koopButton)] });
-                console.log('Kooperations-Panel eingerichtet.');
+        if (koopChannel && koopChannel.isTextBased()) {
+            const fetched = await koopChannel.messages.fetch({ limit: 10 }).catch(() => null);
+            if (fetched) {
+                for (const msg of fetched.values()) {
+                    if (msg.author.id === client.user.id) await msg.delete().catch(() => {});
+                }
             }
+
+            const koopEmbed = new EmbedBuilder()
+                .setTitle('🤝 Kooperation anfragen')
+                .setDescription('Möchtest du eine Partnerschaft, ein Sponsoring oder eine Event-Kooperation mit der VGPL Germany eingehen?\n\nWähle unten im Menü die passende Art der Kooperation aus, um das Formular auszufüllen!')
+                .setColor('#9B59B6')
+                .setFooter({ text: 'VGPL Germany Kooperationen' });
+
+            const koopSelectMenu = new StringSelectMenuBuilder()
+                .setCustomId('select_koop_category')
+                .setPlaceholder('Art der Kooperation auswählen...')
+                .addOptions([
+                    { label: 'Partner / Sponsor', value: 'koop_partner', description: 'Sponsoring-Angebote oder feste Partnerschaften', emoji: '🤝' },
+                    { label: 'Andere Liga / eSports Organisation', value: 'koop_liga', description: 'Zusammenarbeit zwischen Ligen oder Teams', emoji: '🎮' },
+                    { label: 'Content Creator / Streamer', value: 'koop_streamer', description: 'Partnerschaften für Streamer und Creator', emoji: '📱' },
+                    { label: 'Medienpartner', value: 'koop_medien', description: 'Presse, News oder Content-Sharing', emoji: '📰' },
+                    { label: 'Unternehmen', value: 'koop_firma', description: 'B2B Anfragen, Firmenkooperationen', emoji: '🏢' },
+                    { label: 'Sonstiges', value: 'koop_sonstiges', description: 'Alle anderen Kooperations-Ideen', emoji: '🌐' }
+                ]);
+
+            await koopChannel.send({ embeds: [koopEmbed], components: [new ActionRowBuilder().addComponents(koopSelectMenu)] });
+            console.log('✅ Kooperations-Panel (Dropdown) eingerichtet.');
+        } else {
+            console.error('❌ Koop-Kanal ID ungültig oder kein Textkanal:', CONFIG.KOOP_REG_CHANNEL_ID);
         }
     } catch (e) {
         console.error('Fehler beim Kooperations-Panel:', e);
     }
+}
+
+// BOT BEREIT: Panels beim Start einrichten
+client.once('ready', async () => {
+    console.log(`Erfolgreich eingeloggt als ${client.user.tag}!`);
+    await setupAllPanels();
 });
 
 // INTERAKTIONEN (Menüauswahl, Buttons, Modals)
@@ -343,24 +366,38 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(modal);
     }
 
-    // 3. KLICK AUF "KOOPERATION ANFRAGEN" BUTTON
-    if (interaction.isButton() && interaction.customId === 'btn_open_koop_reg') {
+    // 3. KOOPERATION DROPDOWN AUSGEWÄHLT
+    if (interaction.isStringSelectMenu() && interaction.customId === 'select_koop_category') {
+        const selectedVal = interaction.values[0];
+        
+        let titleMap = {
+            'koop_partner': '🤝 Partner / Sponsor',
+            'koop_liga': '🎮 Andere Liga / eSports Orga',
+            'koop_streamer': '📱 Content Creator / Streamer',
+            'koop_medien': '📰 Medienpartner',
+            'koop_firma': '🏢 Unternehmen',
+            'koop_sonstiges': '🌐 Sonstiges'
+        };
+
+        const modalTitle = titleMap[selectedVal] || '🤝 Kooperation anfragen';
+
         const modal = new ModalBuilder()
-            .setCustomId('modal_koop_registration')
-            .setTitle('🤝 Kooperation anfragen');
+            .setCustomId(`modal_koop_${selectedVal}`)
+            .setTitle(modalTitle);
 
         modal.addComponents(
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_org').setLabel('Name der Firma / Orga / Kanal').setStyle(TextInputStyle.Short).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_contact').setLabel('Ansprechpartner & Discord Tag').setStyle(TextInputStyle.Short).setValue(interaction.user.tag).setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_type').setLabel('Art der Kooperation').setStyle(TextInputStyle.Short).setPlaceholder('z.B. Sponsoring, Event, Stream-Partner').setRequired(true)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_desc').setLabel('Beschreibung / Angebot').setStyle(TextInputStyle.Paragraph).setRequired(true))
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_name').setLabel('Dein Name / Discord Name').setStyle(TextInputStyle.Short).setValue(interaction.user.tag).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_org').setLabel('Organisation / Firma / Liga / Team').setStyle(TextInputStyle.Short).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_link').setLabel('Webseite oder Social Media Link').setStyle(TextInputStyle.Short).setPlaceholder('z.B. Instagram, Twitch, Web-URL (optional)').setRequired(false)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_desc').setLabel('Beschreibung & Zeitraum der Kooperation').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('koop_offer').setLabel('Was bietet ihr / Was erwartet ihr?').setStyle(TextInputStyle.Paragraph).setPlaceholder('Geben & Nehmen (Win-Win Situation beschreiben)').setRequired(true))
         );
 
         return interaction.showModal(modal);
     }
 
     // 4. ABSCHICKEN EINES SUPPORT-MODALS
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_') && interaction.customId !== 'modal_team_registration' && interaction.customId !== 'modal_koop_registration') {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_') && interaction.customId !== 'modal_team_registration' && !interaction.customId.startsWith('modal_koop_')) {
         await interaction.deferReply({ ephemeral: true });
 
         const member = interaction.member;
@@ -494,7 +531,6 @@ client.on('interactionCreate', async (interaction) => {
             if (adminRole) permissionOverwrites.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
             if (headAdminRole) permissionOverwrites.push({ id: headAdminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
 
-            // Erstelle Kanal in Kategorie 1527711258709594273
             const ticketChannel = await guild.channels.create({
                 name: `teamreg-${member.user.username.toLowerCase()}`,
                 type: ChannelType.GuildText,
@@ -525,7 +561,6 @@ client.on('interactionCreate', async (interaction) => {
 
             await ticketChannel.send({ embeds: [okEmbed] });
 
-            // ADMIN-KANAL BENACHRICHTIGUNG (1527737699442753597)
             const adminChannel = await guild.channels.fetch(CONFIG.ADMIN_REG_CHANNEL_ID).catch(() => null);
             if (adminChannel) {
                 const adminEmbed = new EmbedBuilder()
@@ -557,14 +592,15 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // 6. ABSCHICKEN DES KOOPERATIONS FORMULARS
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_koop_registration') {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_koop_')) {
         await interaction.deferReply({ ephemeral: true });
 
         const member = interaction.member;
+        const name = interaction.fields.getTextInputValue('koop_name');
         const org = interaction.fields.getTextInputValue('koop_org');
-        const contact = interaction.fields.getTextInputValue('koop_contact');
-        const type = interaction.fields.getTextInputValue('koop_type');
+        const link = interaction.fields.getTextInputValue('koop_link') || 'Keine Angabe';
         const desc = interaction.fields.getTextInputValue('koop_desc');
+        const offer = interaction.fields.getTextInputValue('koop_offer');
 
         try {
             const permissionOverwrites = [
@@ -576,7 +612,6 @@ client.on('interactionCreate', async (interaction) => {
             if (adminRole) permissionOverwrites.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
             if (headAdminRole) permissionOverwrites.push({ id: headAdminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
 
-            // Erstelle Kanal in Kategorie 1527714318752415844
             const ticketChannel = await guild.channels.create({
                 name: `koop-${member.user.username.toLowerCase()}`,
                 type: ChannelType.GuildText,
@@ -588,10 +623,11 @@ client.on('interactionCreate', async (interaction) => {
                 .setTitle('🤝 Neue Kooperations-Anfrage')
                 .setDescription(`Diese Anfrage wurde von ${member} erstellt.`)
                 .addFields(
-                    { name: 'Organisation / Firma / Kanal', value: org },
-                    { name: 'Ansprechpartner', value: contact },
-                    { name: 'Art der Kooperation', value: type },
-                    { name: 'Beschreibung / Angebot', value: desc }
+                    { name: 'Name / Discord', value: name, inline: true },
+                    { name: 'Orga / Firma / Team', value: org, inline: true },
+                    { name: 'Webseite / Social Media', value: link, inline: false },
+                    { name: 'Beschreibung & Zeitraum', value: desc, inline: false },
+                    { name: 'Angebot & Erwartungen', value: offer, inline: false }
                 )
                 .setColor('#9B59B6')
                 .setTimestamp();
@@ -607,17 +643,17 @@ client.on('interactionCreate', async (interaction) => {
 
             await ticketChannel.send({ embeds: [okEmbed] });
 
-            // ADMIN-KANAL BENACHRICHTIGUNG (1529505141223592047)
             const adminChannel = await guild.channels.fetch(CONFIG.KOOP_ADMIN_CHANNEL_ID).catch(() => null);
             if (adminChannel) {
                 const adminEmbed = new EmbedBuilder()
-                    .setTitle('📥 NEUE KOOPERATIONSEINGANG')
+                    .setTitle('📥 NEUE KOOPERATION EINGEGANGEN')
                     .setDescription(`**Erstellt von:** ${member} (${member.user.tag})\n**Ticket-Kanal:** ${ticketChannel}`)
                     .addFields(
-                        { name: 'Orga / Kanal', value: org, inline: true },
-                        { name: 'Ansprechpartner', value: contact, inline: true },
-                        { name: 'Art', value: type, inline: false },
-                        { name: 'Details', value: desc, inline: false },
+                        { name: 'Name / Discord', value: name, inline: true },
+                        { name: 'Orga / Firma', value: org, inline: true },
+                        { name: 'Link', value: link, inline: false },
+                        { name: 'Beschreibung', value: desc, inline: false },
+                        { name: 'Angebot & Erwartung', value: offer, inline: false },
                         { name: 'Status', value: '⏳ Ausstehend (Neu eingegangen)', inline: false }
                     )
                     .setColor('#9B59B6')
@@ -638,7 +674,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 7. ADMIN-BUTTON-INTERAKTIONEN (Für Teams & Kooperationen)
+    // 7. ADMIN-BUTTON-INTERAKTIONEN
     if (interaction.isButton() && (interaction.customId.startsWith('adm_proc_') || interaction.customId.startsWith('adm_acc_') || interaction.customId.startsWith('adm_rej_'))) {
         await interaction.deferUpdate();
 
@@ -688,9 +724,22 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// 9. CHAT NACHRICHTEN VERARBEITEN (KI-Antworten in echten Tickets)
+// 9. CHAT NACHRICHTEN VERARBEITEN (ADMIN-BEFEHL !setup & KI-ANTWORTEN)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
+
+    // ADMIN-MANUELLER BEFEHL FÜR PANELS
+    if (message.content === '!setup') {
+        const isUserAdmin = message.member?.roles.cache.some(role => 
+            role.name.toLowerCase() === CONFIG.ADMIN_ROLE_NAME.toLowerCase() || 
+            role.name.toLowerCase() === CONFIG.HEAD_ADMIN_ROLE_NAME.toLowerCase()
+        );
+        if (isUserAdmin) {
+            await message.reply('🔄 Erzwinge das Erstellen aller 3 Panels...');
+            await setupAllPanels();
+            return message.reply('✅ Alle 3 Panels wurden erfolgreich gesendet!');
+        }
+    }
 
     const channelName = message.channel.name ? message.channel.name.toLowerCase() : '';
     const isStrictTicketChannel = 
