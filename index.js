@@ -39,11 +39,11 @@ const client = new Client({
 
 // KONFIGURATION
 const CONFIG = {
-    TOKEN: process.env.DISCORD_TOKEN,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
+    TOKEN: process.env.DISCORD_TOKEN ? process.env.DISCORD_TOKEN.trim() : "",
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.trim() : "",
     
-    PANEL_CHANNEL_ID: '1527708821320106164', // Support Kanal ID (#hilfe)
-    CATEGORY_ID: '1527708420788977674',      // KATEGORIE ID für neue Tickets
+    PANEL_CHANNEL_ID: '1527708821320106164', 
+    CATEGORY_ID: '1527708420788977674',      
     
     ADMIN_ROLE_NAME: 'Admin',
     HEAD_ADMIN_ROLE_NAME: 'Head Admin'
@@ -84,7 +84,7 @@ async function askBotBrain(userQuery) {
         path: '/v1/chat/completions',
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${apiKey.trim()}`,
+            'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(payload)
         }
@@ -148,7 +148,9 @@ async function setupHelpPanel(statusLogger = console.log) {
 
 // BOT BEREIT
 client.once('ready', async () => {
-    console.log(`Eingeloggt als ${client.user.tag}!`);
+    console.log(`==================================================`);
+    console.log(`✅ BOT ERFOLGREICH EINGELOGGT als ${client.user.tag}!`);
+    console.log(`==================================================`);
     setTimeout(async () => await setupHelpPanel(), 2000);
 });
 
@@ -363,7 +365,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // MANUELLES SETUP VIA !setup
     if (message.content.trim() === '!setup') {
         await setupHelpPanel((msg) => message.reply(msg));
         return;
@@ -399,4 +400,13 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.login(CONFIG.TOKEN);
+// STRIKTES FEHLER-LOGGING FÜR LOGIN
+if (!CONFIG.TOKEN) {
+    console.error("❌ CRITICAL ERROR: Es wurde KEIN 'DISCORD_TOKEN' in den Render Environment Variables gefunden!");
+} else {
+    console.log("Versuche bei Discord einzuloggen...");
+    client.login(CONFIG.TOKEN).catch((err) => {
+        console.error("❌ DISCORD LOGIN FEHLGESCHLAGEN!");
+        console.error("Ursache vom Discord-Server:", err.message);
+    });
+}
