@@ -16,7 +16,7 @@ const https = require('https');
 const http = require('http');
 
 console.log("==================================================");
-console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.8) STARTET !!!");
+console.log("!!! VGPL ALL-IN-ONE BOT (VERSION 13.9) STARTET !!!");
 console.log("==================================================");
 
 // 1. WEBSERVER FÜR RENDER KEEP-ALIVE
@@ -141,15 +141,22 @@ async function askBotBrain(userQuery) {
 
 // PANEL-SETUP MIT EXAKTER DIAGNOSE FÜR DISCORD
 async function setupAllPanels(statusLogger = console.log) {
-    statusLogger("🔄 Starte Panel-Einrichtung & Kanal-Analyse...");
+    const log = async (msg) => {
+        console.log(msg);
+        if (typeof statusLogger === 'function') {
+            await statusLogger(msg);
+        }
+    };
+
+    await log("🔄 Starte Panel-Einrichtung & Kanal-Analyse...");
 
     // 1. SUPPORT-PANEL (#hilfe)
     try {
         const ch = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
         if (!ch) {
-            statusLogger(`❌ 1. Support-Kanal ID (${CONFIG.PANEL_CHANNEL_ID}) nicht gefunden!`);
+            await log(`❌ 1. Support-Kanal ID (${CONFIG.PANEL_CHANNEL_ID}) nicht gefunden!`);
         } else if (ch.type === ChannelType.GuildCategory) {
-            statusLogger(`⚠️ 1. Support-ID (${CONFIG.PANEL_CHANNEL_ID}) ist eine **Kategorie** und kein Text-Kanal!`);
+            await log(`⚠️ 1. Support-ID (${CONFIG.PANEL_CHANNEL_ID}) ist eine **Kategorie** und kein Text-Kanal!`);
         } else {
             const embed = new EmbedBuilder()
                 .setTitle('📩 VGPL Germany Support-Center')
@@ -171,19 +178,19 @@ async function setupAllPanels(statusLogger = console.log) {
                 ]);
 
             await ch.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
-            statusLogger(`✅ 1. Support-Panel gesendet in Kanal: **#${ch.name}**`);
+            await log(`✅ 1. Support-Panel gesendet in Kanal: **#${ch.name}**`);
         }
     } catch (e) {
-        statusLogger(`❌ Fehler Support-Panel: ${e.message}`);
+        await log(`❌ Fehler Support-Panel: ${e.message}`);
     }
 
     // 2. TEAM-REGISTRIERUNG PANEL
     try {
         const ch = await client.channels.fetch(CONFIG.TEAM_REG_CHANNEL_ID).catch(() => null);
         if (!ch) {
-            statusLogger(`❌ 2. Team-Reg Kanal ID (${CONFIG.TEAM_REG_CHANNEL_ID}) nicht gefunden!`);
+            await log(`❌ 2. Team-Reg Kanal ID (${CONFIG.TEAM_REG_CHANNEL_ID}) nicht gefunden!`);
         } else if (ch.type === ChannelType.GuildCategory) {
-            statusLogger(`⚠️ 2. Team-Reg ID (${CONFIG.TEAM_REG_CHANNEL_ID}) ist eine **Kategorie**! Bitte eine Text-Kanal ID eintragen.`);
+            await log(`⚠️ 2. Team-Reg ID (${CONFIG.TEAM_REG_CHANNEL_ID}) ist eine **Kategorie**! Bitte eine Text-Kanal ID eintragen.`);
         } else {
             const regEmbed = new EmbedBuilder()
                 .setTitle('🏆 Team registrieren')
@@ -198,19 +205,19 @@ async function setupAllPanels(statusLogger = console.log) {
                 .setStyle(ButtonStyle.Primary);
 
             await ch.send({ embeds: [regEmbed], components: [new ActionRowBuilder().addComponents(regButton)] });
-            statusLogger(`✅ 2. Team-Reg-Panel gesendet in Kanal: **#${ch.name}**`);
+            await log(`✅ 2. Team-Reg-Panel gesendet in Kanal: **#${ch.name}**`);
         }
     } catch (e) {
-        statusLogger(`❌ Fehler Team-Reg Panel: ${e.message}`);
+        await log(`❌ Fehler Team-Reg Panel: ${e.message}`);
     }
 
     // 3. KOOPERATION DROPDOWN PANEL
     try {
         const ch = await client.channels.fetch(CONFIG.KOOP_REG_CHANNEL_ID).catch(() => null);
         if (!ch) {
-            statusLogger(`❌ 3. Koop-Kanal ID (${CONFIG.KOOP_REG_CHANNEL_ID}) nicht gefunden!`);
+            await log(`❌ 3. Koop-Kanal ID (${CONFIG.KOOP_REG_CHANNEL_ID}) nicht gefunden!`);
         } else if (ch.type === ChannelType.GuildCategory) {
-            statusLogger(`⚠️ 3. Koop-ID (${CONFIG.KOOP_REG_CHANNEL_ID}) ist eine **Kategorie**! Bitte eine Text-Kanal ID eintragen.`);
+            await log(`⚠️ 3. Koop-ID (${CONFIG.KOOP_REG_CHANNEL_ID}) ist eine **Kategorie**! Bitte eine Text-Kanal ID eintragen.`);
         } else {
             const koopEmbed = new EmbedBuilder()
                 .setTitle('🤝 Kooperation anfragen')
@@ -231,10 +238,10 @@ async function setupAllPanels(statusLogger = console.log) {
                 ]);
 
             await ch.send({ embeds: [koopEmbed], components: [new ActionRowBuilder().addComponents(koopSelectMenu)] });
-            statusLogger(`✅ 3. Kooperations-Panel gesendet in Kanal: **#${ch.name}**`);
+            await log(`✅ 3. Kooperations-Panel gesendet in Kanal: **#${ch.name}**`);
         }
     } catch (e) {
-        statusLogger(`❌ Fehler Koop-Panel: ${e.message}`);
+        await log(`❌ Fehler Koop-Panel: ${e.message}`);
     }
 }
 
@@ -478,6 +485,7 @@ client.on('interactionCreate', async (interaction) => {
             if (adminRole) permissionOverwrites.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
             if (headAdminRole) permissionOverwrites.push({ id: headAdminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
 
+            // Erstelle Support Ticket in KATEGORIE 1527708420788977674
             const ticketChannel = await guild.channels.create({
                 name: `${ticketPrefix}-${member.user.username.toLowerCase()}`,
                 type: ChannelType.GuildText,
@@ -518,6 +526,7 @@ client.on('interactionCreate', async (interaction) => {
             if (adminRole) permissionOverwrites.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
             if (headAdminRole) permissionOverwrites.push({ id: headAdminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
 
+            // Erstelle Team-Ticket in KATEGORIE 1527711258709594273
             const ticketChannel = await guild.channels.create({
                 name: `teamreg-${member.user.username.toLowerCase()}`,
                 type: ChannelType.GuildText,
@@ -599,6 +608,7 @@ client.on('interactionCreate', async (interaction) => {
             if (adminRole) permissionOverwrites.push({ id: adminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
             if (headAdminRole) permissionOverwrites.push({ id: headAdminRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] });
 
+            // Erstelle Kooperations-Ticket in KATEGORIE 1527714318752415844
             const ticketChannel = await guild.channels.create({
                 name: `koop-${member.user.username.toLowerCase()}`,
                 type: ChannelType.GuildText,
